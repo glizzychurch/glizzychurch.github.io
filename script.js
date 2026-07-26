@@ -305,11 +305,12 @@ document.getElementById("year").textContent = new Date().getFullYear();
   /* ---- Game loop ------------------------------------------------------ */
   function tick() {
     timeLeft -= 1;
-    timeEl.textContent = timeLeft;
+    timeEl.textContent = Math.max(timeLeft, 0);
     if (timeLeft <= 0) endGame();
   }
 
   function startGame() {
+    clearInterval(timer); // belt-and-suspenders: never let a stray interval survive a restart
     score = 0;
     timeLeft = GAME_LENGTH;
     scoreEl.textContent = "0";
@@ -323,6 +324,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     nameInput.value = "";
     submitBtn.disabled = false;
     startBtn.hidden = true;
+    startBtn.disabled = true;
     target.disabled = false;
     target.focus();
     timer = setInterval(tick, 1000);
@@ -330,8 +332,10 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
   function endGame() {
     clearInterval(timer);
+    timer = null;
     target.disabled = true;
     startBtn.hidden = false;
+    startBtn.disabled = false;
     startBtn.textContent = "Play Again";
     const best = Math.max(getBest(), score);
     setBest(best);

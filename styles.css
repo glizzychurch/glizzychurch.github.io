@@ -65,6 +65,12 @@ p { margin: 0 0 1em; }
 section { position: relative; }
 button { font: inherit; }
 
+/* The `hidden` attribute must always win, even over a component's own
+   `display` rule (e.g. .btn sets display:inline-flex, which would
+   otherwise silently cancel out hidden and leave a "hidden" button
+   fully visible and clickable). */
+[hidden] { display: none !important; }
+
 :focus-visible {
   outline: 3px solid var(--sunset-gold);
   outline-offset: 3px;
