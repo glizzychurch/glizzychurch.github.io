@@ -36,6 +36,24 @@ const albums = [
 ];
 
 /* ---------------------------------------------------------------------
+   EDIT ME #3 — Shared Glizzy Chomp leaderboard (optional).
+   This is what lets everyone's high scores show up on the same board,
+   not just saved to their own phone. It runs on Firebase's free tier
+   (Realtime Database) — see README.md for the ~5 minute setup.
+   Leave every value as "" and the game still works fine — it just skips
+   the shared leaderboard and keeps each person's own best score locally.
+--------------------------------------------------------------------- */
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  databaseURL: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+/* ---------------------------------------------------------------------
    Below this line: rendering + interaction logic. No need to edit.
 --------------------------------------------------------------------- */
 
@@ -132,9 +150,11 @@ document.getElementById("year").textContent = new Date().getFullYear();
 // Hero art fades in via CSS animation automatically — no JS needed.
 
 /* ---------------------------------------------------------------------
-   Glizzy Chomp — a 15-second tap game. Best score is saved locally on
-   each visitor's own device (falls back gracefully if storage is
-   unavailable, e.g. in a locked-down preview).
+   Glizzy Chomp — a 15-second tap game, plus an optional shared
+   leaderboard (see EDIT ME #3 above). Each visitor's personal best is
+   always saved locally; the shared top-5 board only turns on once
+   Firebase is configured — until then it just says so and the game
+   still works fine on its own.
 --------------------------------------------------------------------- */
 (function glizzyChomp() {
   const startBtn = document.getElementById("gcStart");
@@ -144,13 +164,19 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const bestEl = document.getElementById("gcBest");
   const resultEl = document.getElementById("gcResult");
   const rankEl = document.getElementById("gcRank");
+  const submitBox = document.getElementById("scoreSubmit");
+  const nameInput = document.getElementById("gcNameInput");
+  const submitBtn = document.getElementById("gcSubmitBtn");
+  const leaderboardList = document.getElementById("leaderboardList");
   if (!startBtn || !target) return;
 
   const GAME_LENGTH = 15;
+  const BOARD_SIZE = 5;
   let score = 0;
   let timeLeft = GAME_LENGTH;
   let timer = null;
   let fallbackBest = 0;
+  let currentTop = []; // kept in sync with the shared leaderboard, sorted high to low
 
   function getBest() {
     try {
@@ -167,15 +193,116 @@ document.getElementById("year").textContent = new Date().getFullYear();
     }
   }
   function rankFor(s) {
-    if (s >= 40) return "Certified Glizzy Saint";
-    if (s >= 30) return "Glizzy Bishop";
-    if (s >= 20) return "Shed Deacon";
-    if (s >= 10) return "Backyard Regular";
+    if (s >= 100) return "Certified Glizzy Saint";
+    if (s >= 75) return "Glizzy Bishop";
+    if (s >= 41) return "Shed Deacon";
+    if (s >= 15) return "Backyard Regular";
     return "Rookie Griller";
+  }
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   bestEl.textContent = getBest();
 
+  /* ---- Shared leaderboard (Firebase Realtime Database) --------------- */
+  const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
+  let scoresRef = null;
+
+  function renderLeaderboard(entries) {
+    if (!leaderboardList) return;
+    if (!entries.length) {
+      leaderboardList.innerHTML = '<li class="leaderboard-empty">No scores yet — be the first.</li>';
+      return;
+    }
+    leaderboardList.innerHTML = entries
+      .map(function (e, i) {
+        const name = escapeHTML(String(e.name || "Anonymous Glizzy Fan").slice(0, 24));
+        return (
+          '<li class="' + (i === 0 ? "rank-1" : "") + '">' +
+          '<span class="lb-rank">' + (i + 1) + "</span>" +
+          '<span class="lb-name">' + name + "</span>" +
+          '<span class="lb-score">' + e.score + "</span>" +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
+  if (!leaderboardConfigured) {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
+  } else if (typeof firebase === "undefined") {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard couldn\'t load.</li>';
+  } else {
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      scoresRef = firebase.database().ref("scores");
+      scoresRef.on(
+        "value",
+        function (snapshot) {
+          const val = snapshot.val() || {};
+          currentTop = Object.keys(val)
+            .map(function (key) {
+              return { key: key, name: val[key].name, score: val[key].score };
+            })
+            .sort(function (a, b) {
+              return b.score - a.score;
+            })
+            .slice(0, BOARD_SIZE);
+          renderLeaderboard(currentTop);
+        },
+        function () {
+          if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+        }
+      );
+    } catch (e) {
+      if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+    }
+  }
+
+  function qualifiesForBoard(s) {
+    if (!scoresRef || s <= 0) return false;
+    if (currentTop.length < BOARD_SIZE) return true;
+    return s > currentTop[currentTop.length - 1].score;
+  }
+
+  function pruneToTop() {
+    if (!scoresRef) return;
+    scoresRef.once("value").then(function (snapshot) {
+      const val = snapshot.val() || {};
+      const all = Object.keys(val)
+        .map(function (key) {
+          return { key: key, score: val[key].score };
+        })
+        .sort(function (a, b) {
+          return b.score - a.score;
+        });
+      all.slice(BOARD_SIZE).forEach(function (entry) {
+        scoresRef.child(entry.key).remove();
+      });
+    });
+  }
+
+  function submitScore() {
+    if (!scoresRef) return;
+    const name = (nameInput.value || "").trim().slice(0, 24) || "Anonymous Glizzy Fan";
+    submitBtn.disabled = true;
+    scoresRef
+      .push({ name: name, score: score, ts: Date.now() })
+      .then(pruneToTop)
+      .catch(function () {})
+      .then(function () {
+        submitBox.classList.add("submitted");
+        const note = document.createElement("p");
+        note.className = "score-submit-note";
+        note.textContent = "Added! Nice glizzying.";
+        submitBox.appendChild(note);
+      });
+  }
+
+  /* ---- Game loop ------------------------------------------------------ */
   function tick() {
     timeLeft -= 1;
     timeEl.textContent = timeLeft;
@@ -188,6 +315,13 @@ document.getElementById("year").textContent = new Date().getFullYear();
     scoreEl.textContent = "0";
     timeEl.textContent = String(GAME_LENGTH);
     resultEl.hidden = true;
+    submitBox.hidden = true;
+    submitBox.classList.remove("submitted");
+    submitBox.querySelectorAll(".score-submit-note").forEach(function (n) {
+      n.remove();
+    });
+    nameInput.value = "";
+    submitBtn.disabled = false;
     startBtn.hidden = true;
     target.disabled = false;
     target.focus();
@@ -204,6 +338,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     bestEl.textContent = best;
     rankEl.textContent = score + " glizzies — " + rankFor(score);
     resultEl.hidden = false;
+    submitBox.hidden = !qualifiesForBoard(score);
   }
 
   function chomp() {
@@ -218,4 +353,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
   startBtn.addEventListener("click", startGame);
   target.addEventListener("click", chomp);
+  submitBtn.addEventListener("click", submitScore);
+  nameInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") submitScore();
+  });
 })();
