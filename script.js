@@ -44,13 +44,13 @@ const albums = [
    the shared leaderboard and keeps each person's own best score locally.
 --------------------------------------------------------------------- */
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  databaseURL: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyACISIYcTV0rdww-Qhr_SR1PxR3otr2HyE",
+  authDomain: "glizzy-chomp.firebaseapp.com",
+  databaseURL: "https://glizzy-chomp-default-rtdb.firebaseio.com",
+  projectId: "glizzy-chomp",
+  storageBucket: "glizzy-chomp.firebasestorage.app",
+  messagingSenderId: "754041160264",
+  appId: "1:754041160264:web:1671ba01f2e94905998e7d"
 };
 
 /* ---------------------------------------------------------------------
