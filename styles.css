@@ -369,6 +369,7 @@ button { font: inherit; }
 .game-stage {
   max-width: 340px;
   margin: var(--space-3) auto 0;
+  touch-action: manipulation;
 }
 .game-hud {
   display: flex;
@@ -394,6 +395,8 @@ button { font: inherit; }
   cursor: pointer;
   transition: transform 80ms ease;
   padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .glizzy-target svg { width: 76px; height: 76px; pointer-events: none; }
 .glizzy-target:active { transform: scale(0.93); }
