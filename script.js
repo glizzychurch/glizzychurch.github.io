@@ -23,15 +23,15 @@ const albums = [
     year: "2025",
     title: "The First Gathering",
     blurb: "Where it all began — The Shed goes up, the tradition gets named.",
-    link: "",
+    link: "https://photos.app.goo.gl/w9jjUbbM1C1P3XRk9",
     cover: "images/shed-photo.jpg"
   },
   {
     year: "2026",
     title: "Shed-Fest 2026",
     blurb: "The lineup is fiction. Brookville Lake is very real. So are the sunburns.",
-    link: "",
-    cover: "images/shedfest-poster.jpg"
+    link: "https://photos.app.goo.gl/qA5pecH43MmT725U7",
+    cover: "images/drinks-bloodymary.jpg"
   }
 ];
 
