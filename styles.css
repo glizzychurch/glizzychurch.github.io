@@ -426,6 +426,13 @@ button { font: inherit; }
 
 .leaderboard { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid rgba(251,245,232,0.18); }
 .leaderboard-title { text-align: center; margin-bottom: var(--space-2) !important; }
+.leaderboard-season {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: rgba(251,245,232,0.55) !important;
+  margin: -0.6em 0 0.9em !important;
+}
 .leaderboard-list {
   list-style: none;
   margin: 0 auto;
@@ -702,3 +709,87 @@ button { font: inherit; }
 }
 .site-footer a { color: var(--sunset-gold) !important; text-decoration: none; }
 .site-footer a:hover { text-decoration: underline; }
+
+/* ---- Glizzy Gauntlet (platformer) --------------------------------- */
+.platformer-stage { touch-action: manipulation; }
+.platformer-hud {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  color: var(--sunset-gold) !important;
+}
+.platformer-hud b { color: var(--trim-white) !important; font-size: 1rem; }
+
+.platformer-canvas-wrap {
+  position: relative;
+  max-width: 420px;
+  margin: 0 auto var(--space-3);
+  border: 4px solid var(--brass);
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+  box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+}
+#pfCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  background: #6fb8d6;
+}
+.platformer-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(14,20,35,0.72) !important;
+  padding: var(--space-2);
+}
+.overlay-title { font-family: var(--font-display) !important; font-size: 1.3rem !important; color: var(--trim-white) !important; margin-bottom: 0.3em !important; }
+.overlay-sub { font-size: 0.85rem !important; color: rgba(251,245,232,0.85) !important; max-width: 26ch; margin-left: auto; margin-right: auto; }
+#pfOverlayResult p#pfMessage { font-family: var(--font-display); font-style: italic; font-size: 1.1rem; color: var(--sunset-gold) !important; margin-bottom: 0.6em; }
+
+.platformer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 420px;
+  margin: 0 auto;
+  touch-action: manipulation;
+}
+.pf-dpad { display: flex; gap: 0.6em; }
+.pf-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 3px solid var(--sunset-gold);
+  background: rgba(251,245,232,0.1) !important;
+  color: var(--trim-white) !important;
+  font-size: 1.3rem;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pf-btn:active { background: rgba(242,166,61,0.3) !important; transform: scale(0.94); }
+.pf-btn-jump {
+  width: 74px;
+  height: 74px;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  background: var(--shed-red) !important;
+  border-color: var(--trim-white);
+}
+.pf-btn-jump:active { background: var(--shed-red-deep) !important; }

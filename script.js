@@ -23,15 +23,15 @@ const albums = [
     year: "2025",
     title: "The First Gathering",
     blurb: "Where it all began — The Shed goes up, the tradition gets named.",
-    link: "https://photos.app.goo.gl/w9jjUbbM1C1P3XRk9",
+    link: "",
     cover: "images/shed-photo.jpg"
   },
   {
     year: "2026",
     title: "Shed-Fest 2026",
     blurb: "The lineup is fiction. Brookville Lake is very real. So are the sunburns.",
-    link: "https://photos.app.goo.gl/qA5pecH43MmT725U7",
-    cover: "images/drinks-bloodymary.jpg"
+    link: "",
+    cover: "images/shedfest-poster.jpg"
   }
 ];
 
@@ -168,6 +168,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const nameInput = document.getElementById("gcNameInput");
   const submitBtn = document.getElementById("gcSubmitBtn");
   const leaderboardList = document.getElementById("leaderboardList");
+  const seasonLabel = document.getElementById("seasonLabel");
   if (!startBtn || !target) return;
 
   const GAME_LENGTH = 15;
@@ -212,6 +213,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
   /* ---- Shared leaderboard (Firebase Realtime Database) --------------- */
   const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
   let scoresRef = null;
+  let allEntries = [];
+  let seasonStart = 0;
 
   function renderLeaderboard(entries) {
     if (!leaderboardList) return;
@@ -233,6 +236,23 @@ document.getElementById("year").textContent = new Date().getFullYear();
       .join("");
   }
 
+  function updateSeasonLabel() {
+    if (!seasonLabel) return;
+    seasonLabel.textContent = seasonStart ? "Season since " + new Date(seasonStart).toLocaleDateString() : "All-time board";
+  }
+
+  function computeTop() {
+    const eligible = seasonStart ? allEntries.filter(function (e) { return e.ts >= seasonStart; }) : allEntries;
+    currentTop = eligible
+      .sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score; // higher score first
+        return b.ts - a.ts; // ties: newer score ranks higher
+      })
+      .slice(0, BOARD_SIZE);
+    updateSeasonLabel();
+    renderLeaderboard(currentTop);
+  }
+
   if (!leaderboardConfigured) {
     if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
   } else if (typeof firebase === "undefined") {
@@ -245,20 +265,25 @@ document.getElementById("year").textContent = new Date().getFullYear();
         "value",
         function (snapshot) {
           const val = snapshot.val() || {};
-          currentTop = Object.keys(val)
-            .map(function (key) {
-              return { key: key, name: val[key].name, score: val[key].score };
-            })
-            .sort(function (a, b) {
-              return b.score - a.score;
-            })
-            .slice(0, BOARD_SIZE);
-          renderLeaderboard(currentTop);
+          allEntries = Object.keys(val).map(function (key) {
+            return { key: key, name: val[key].name, score: val[key].score, ts: val[key].ts || 0 };
+          });
+          computeTop();
         },
         function () {
           if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
         }
       );
+      // A shared "season" marker, set manually from the Firebase console when
+      // you want to start the board fresh — see README. Nothing is ever
+      // deleted; this just changes which entries count toward the top 5.
+      firebase
+        .database(app)
+        .ref("season/startedAt")
+        .on("value", function (snapshot) {
+          seasonStart = snapshot.val() || 0;
+          computeTop();
+        });
     } catch (e) {
       if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
     }
@@ -369,6 +394,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const nameInput = document.getElementById("ppNameInput");
   const submitBtn = document.getElementById("ppSubmitBtn");
   const leaderboardList = document.getElementById("ppLeaderboardList");
+  const seasonLabel = document.getElementById("ppSeasonLabel");
   if (!startBtn || !glass) return;
 
   const TARGET = 95; // percent full — the ideal pour
@@ -409,6 +435,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
   /* ---- Shared leaderboard --------------------------------------------- */
   const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
   let scoresRef = null;
+  let allEntries = [];
+  let seasonStart = 0;
 
   function renderLeaderboard(entries) {
     if (!leaderboardList) return;
@@ -430,6 +458,23 @@ document.getElementById("year").textContent = new Date().getFullYear();
       .join("");
   }
 
+  function updateSeasonLabel() {
+    if (!seasonLabel) return;
+    seasonLabel.textContent = seasonStart ? "Season since " + new Date(seasonStart).toLocaleDateString() : "All-time board";
+  }
+
+  function computeTop() {
+    const eligible = seasonStart ? allEntries.filter(function (e) { return e.ts >= seasonStart; }) : allEntries;
+    currentTop = eligible
+      .sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.ts - a.ts;
+      })
+      .slice(0, BOARD_SIZE);
+    updateSeasonLabel();
+    renderLeaderboard(currentTop);
+  }
+
   if (!leaderboardConfigured) {
     if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
   } else if (typeof firebase === "undefined") {
@@ -442,20 +487,24 @@ document.getElementById("year").textContent = new Date().getFullYear();
         "value",
         function (snapshot) {
           const val = snapshot.val() || {};
-          currentTop = Object.keys(val)
-            .map(function (key) {
-              return { key: key, name: val[key].name, score: val[key].score };
-            })
-            .sort(function (a, b) {
-              return b.score - a.score;
-            })
-            .slice(0, BOARD_SIZE);
-          renderLeaderboard(currentTop);
+          allEntries = Object.keys(val).map(function (key) {
+            return { key: key, name: val[key].name, score: val[key].score, ts: val[key].ts || 0 };
+          });
+          computeTop();
         },
         function () {
           if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
         }
       );
+      // Same shared season marker Glizzy Chomp uses — one "new season" reset
+      // refreshes both boards together.
+      firebase
+        .database(app)
+        .ref("season/startedAt")
+        .on("value", function (snapshot) {
+          seasonStart = snapshot.val() || 0;
+          computeTop();
+        });
     } catch (e) {
       if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
     }
@@ -568,4 +617,503 @@ document.getElementById("year").textContent = new Date().getFullYear();
   nameInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") submitScore();
   });
+})();
+
+/* ---------------------------------------------------------------------
+   Glizzy Gauntlet — a small hand-built platformer. Canvas-rendered,
+   frame-based physics (tuned for ~60fps), single jump (no double-jump),
+   touch buttons + keyboard. Shares the same leaderboard/season pattern
+   as the other two games, on its own Firebase node ("platformerScores").
+--------------------------------------------------------------------- */
+(function glizzyGauntlet() {
+  const canvas = document.getElementById("pfCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("pfScore");
+  const bestEl = document.getElementById("pfBest");
+  const overlay = document.getElementById("pfOverlay");
+  const overlayStart = document.getElementById("pfOverlayStart");
+  const overlayResult = document.getElementById("pfOverlayResult");
+  const startBtn = document.getElementById("pfStart");
+  const retryBtn = document.getElementById("pfRetry");
+  const messageEl = document.getElementById("pfMessage");
+  const submitBox = document.getElementById("pfSubmitBox");
+  const nameInput = document.getElementById("pfNameInput");
+  const submitBtn = document.getElementById("pfSubmitBtn");
+  const leftBtn = document.getElementById("pfLeft");
+  const rightBtn = document.getElementById("pfRight");
+  const jumpBtn = document.getElementById("pfJump");
+  const leaderboardList = document.getElementById("pfLeaderboardList");
+  const seasonLabel = document.getElementById("pfSeasonLabel");
+
+  /* ---- Constants -------------------------------------------------------- */
+  const VIEW_W = 400, VIEW_H = 220;
+  const GRAVITY = 0.55;
+  const JUMP_VELOCITY = -10.5;
+  const MOVE_SPEED = 2.6;
+  const MAX_FALL_SPEED = 12;
+  const PLAYER_W = 20, PLAYER_H = 28;
+  const GROUND_Y = 190;
+  const TIME_LIMIT_SEC = 90;
+  const BOARD_SIZE = 5;
+
+  const platforms = [
+    { x: 0, y: GROUND_Y, w: 280, h: 40 },
+    { x: 350, y: GROUND_Y, w: 170, h: 40 },
+    { x: 580, y: GROUND_Y, w: 240, h: 40 },
+    { x: 895, y: GROUND_Y, w: 85, h: 40 },
+    { x: 1050, y: GROUND_Y, w: 400, h: 40 },
+    { x: 1520, y: GROUND_Y, w: 380, h: 40 },
+    { x: 1970, y: GROUND_Y, w: 230, h: 40 },
+    { x: 400, y: 120, w: 60, h: 15 },
+    { x: 680, y: 160, w: 28, h: 30 },
+    { x: 1100, y: 130, w: 60, h: 15 },
+    { x: 1180, y: 110, w: 60, h: 15 }
+  ];
+  const collectiblesTemplate = [
+    { x: 120, y: 170 },
+    { x: 430, y: 100 },
+    { x: 1210, y: 90 },
+    { x: 1600, y: 155 },
+    { x: 1750, y: 155 }
+  ];
+  const goal = { x: 2150, y: GROUND_Y };
+  const LEVEL_WIDTH = 2200;
+
+  let collectibles = [];
+  let player = {};
+  let camera = { x: 0 };
+  let leftPressed = false;
+  let rightPressed = false;
+  let jumpRequested = false;
+  let collectedCount = 0;
+  let startTime = 0;
+  let runFrame = 0;
+  let rafId = null;
+  let gameState = "idle"; // idle | playing | result
+  let fallbackBest = 0;
+  let pendingScore = 0;
+
+  function getBest() {
+    try {
+      return parseInt(localStorage.getItem("glizzyGauntletBest") || "0", 10);
+    } catch (e) {
+      return fallbackBest;
+    }
+  }
+  function setBest(v) {
+    try {
+      localStorage.setItem("glizzyGauntletBest", String(v));
+    } catch (e) {
+      fallbackBest = v;
+    }
+  }
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  bestEl.textContent = getBest();
+
+  /* ---- Shared leaderboard ------------------------------------------------ */
+  const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
+  let scoresRef = null;
+  let allEntries = [];
+  let seasonStart = 0;
+  let currentTop = [];
+
+  function renderLeaderboard(entries) {
+    if (!leaderboardList) return;
+    if (!entries.length) {
+      leaderboardList.innerHTML = '<li class="leaderboard-empty">No runs yet — be the first.</li>';
+      return;
+    }
+    leaderboardList.innerHTML = entries
+      .map(function (e, i) {
+        const name = escapeHTML(String(e.name || "Anonymous Glizzy Fan").slice(0, 24));
+        return (
+          '<li class="' + (i === 0 ? "rank-1" : "") + '">' +
+          '<span class="lb-rank">' + (i + 1) + "</span>" +
+          '<span class="lb-name">' + name + "</span>" +
+          '<span class="lb-score">' + e.score + "</span>" +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
+  function updateSeasonLabel() {
+    if (!seasonLabel) return;
+    seasonLabel.textContent = seasonStart ? "Season since " + new Date(seasonStart).toLocaleDateString() : "All-time board";
+  }
+
+  function computeTop() {
+    const eligible = seasonStart ? allEntries.filter(function (e) { return e.ts >= seasonStart; }) : allEntries;
+    currentTop = eligible
+      .sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.ts - a.ts;
+      })
+      .slice(0, BOARD_SIZE);
+    updateSeasonLabel();
+    renderLeaderboard(currentTop);
+  }
+
+  if (!leaderboardConfigured) {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
+  } else if (typeof firebase === "undefined") {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard couldn\'t load.</li>';
+  } else {
+    try {
+      const app = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(FIREBASE_CONFIG);
+      scoresRef = firebase.database(app).ref("platformerScores");
+      scoresRef.on(
+        "value",
+        function (snapshot) {
+          const val = snapshot.val() || {};
+          allEntries = Object.keys(val).map(function (key) {
+            return { key: key, name: val[key].name, score: val[key].score, ts: val[key].ts || 0 };
+          });
+          computeTop();
+        },
+        function () {
+          if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+        }
+      );
+      firebase
+        .database(app)
+        .ref("season/startedAt")
+        .on("value", function (snapshot) {
+          seasonStart = snapshot.val() || 0;
+          computeTop();
+        });
+    } catch (e) {
+      if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+    }
+  }
+
+  function qualifiesForBoard(s) {
+    if (!scoresRef || s <= 0) return false;
+    if (currentTop.length < BOARD_SIZE) return true;
+    return s > currentTop[currentTop.length - 1].score;
+  }
+
+  function submitScore() {
+    if (!scoresRef) return;
+    const name = (nameInput.value || "").trim().slice(0, 24) || "Anonymous Glizzy Fan";
+    submitBtn.disabled = true;
+    scoresRef
+      .push({ name: name, score: pendingScore, ts: Date.now() })
+      .catch(function () {})
+      .then(function () {
+        submitBox.classList.add("submitted");
+        const note = document.createElement("p");
+        note.className = "score-submit-note";
+        note.textContent = "Added! See you at The Shed.";
+        submitBox.appendChild(note);
+      });
+  }
+
+  /* ---- Physics ------------------------------------------------------------ */
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function currentProgressPct() {
+    return Math.min(1, Math.max(0, player.x / LEVEL_WIDTH));
+  }
+  function liveScore() {
+    return Math.round(currentProgressPct() * 100) + collectedCount * 15;
+  }
+
+  function resetRun() {
+    player = { x: 20, y: GROUND_Y - PLAYER_H, vy: 0, onGround: true, facing: 1 };
+    camera.x = 0;
+    collectibles = collectiblesTemplate.map(function (c) {
+      return { x: c.x, y: c.y, collected: false };
+    });
+    collectedCount = 0;
+    leftPressed = false;
+    rightPressed = false;
+    jumpRequested = false;
+    runFrame = 0;
+    startTime = performance.now();
+  }
+
+  function updatePhysics() {
+    let vx = 0;
+    if (leftPressed) vx -= MOVE_SPEED;
+    if (rightPressed) vx += MOVE_SPEED;
+    if (vx < 0) player.facing = -1;
+    if (vx > 0) player.facing = 1;
+
+    player.x += vx;
+    if (player.x < 0) player.x = 0;
+    platforms.forEach(function (p) {
+      const pr = { x: player.x, y: player.y, w: PLAYER_W, h: PLAYER_H };
+      if (rectsOverlap(pr, p)) {
+        if (vx > 0) player.x = p.x - PLAYER_W;
+        else if (vx < 0) player.x = p.x + p.w;
+      }
+    });
+
+    player.vy += GRAVITY;
+    if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
+    player.y += player.vy;
+    player.onGround = false;
+    platforms.forEach(function (p) {
+      const pr = { x: player.x, y: player.y, w: PLAYER_W, h: PLAYER_H };
+      if (rectsOverlap(pr, p)) {
+        if (player.vy > 0) {
+          player.y = p.y - PLAYER_H;
+          player.vy = 0;
+          player.onGround = true;
+        } else if (player.vy < 0) {
+          player.y = p.y + p.h;
+          player.vy = 0;
+        }
+      }
+    });
+
+    if (jumpRequested && player.onGround) {
+      player.vy = JUMP_VELOCITY;
+      player.onGround = false;
+    }
+    jumpRequested = false;
+
+    collectibles.forEach(function (c) {
+      if (c.collected) return;
+      const dx = player.x + PLAYER_W / 2 - c.x;
+      const dy = player.y + PLAYER_H / 2 - c.y;
+      if (Math.sqrt(dx * dx + dy * dy) < 22) {
+        c.collected = true;
+        collectedCount += 1;
+      }
+    });
+
+    camera.x = Math.max(0, Math.min(player.x - VIEW_W / 2, LEVEL_WIDTH - VIEW_W));
+
+    if (player.y > VIEW_H + 60) {
+      endRun(false, "fell");
+      return;
+    }
+    const elapsedSec = (performance.now() - startTime) / 1000;
+    if (elapsedSec > TIME_LIMIT_SEC) {
+      endRun(false, "timeout");
+      return;
+    }
+    if (player.x + PLAYER_W >= goal.x) {
+      endRun(true, "goal");
+      return;
+    }
+
+    if ((leftPressed || rightPressed) && player.onGround) runFrame += 1;
+    scoreEl.textContent = String(liveScore());
+  }
+
+  /* ---- Rendering ------------------------------------------------------------ */
+  function drawPlayer() {
+    ctx.save();
+    ctx.translate(player.x + PLAYER_W / 2, player.y + PLAYER_H / 2);
+    if (player.facing < 0) ctx.scale(-1, 1);
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    const swing = player.onGround && (leftPressed || rightPressed) ? Math.sin(runFrame * 0.4) * 6 : 0;
+    ctx.beginPath();
+    ctx.moveTo(-4, 8);
+    ctx.lineTo(-4 + swing, 15);
+    ctx.moveTo(4, 8);
+    ctx.lineTo(4 - swing, 15);
+    ctx.stroke();
+    ctx.fillStyle = "#e3b876";
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 10, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "#b23a28";
+    ctx.beginPath();
+    ctx.ellipse(0, -4, 9, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(4, -2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#1b2740";
+    ctx.beginPath();
+    ctx.arc(4.6, -2, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGlizzy(c) {
+    ctx.save();
+    ctx.translate(c.x, c.y);
+    ctx.fillStyle = "#e3b876";
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 8, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#b23a28";
+    ctx.beginPath();
+    ctx.ellipse(0, -1, 7, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawGoal() {
+    ctx.save();
+    ctx.strokeStyle = "#c9a227";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(goal.x, goal.y);
+    ctx.lineTo(goal.x, goal.y - 70);
+    ctx.stroke();
+    ctx.fillStyle = "#b23a28";
+    ctx.beginPath();
+    ctx.moveTo(goal.x, goal.y - 70);
+    ctx.lineTo(goal.x + 22, goal.y - 61);
+    ctx.lineTo(goal.x, goal.y - 52);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function render() {
+    const grad = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+    grad.addColorStop(0, "#1b2740");
+    grad.addColorStop(0.55, "#7a3a4a");
+    grad.addColorStop(1, "#f2a63d");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    ctx.save();
+    ctx.translate(-camera.x, 0);
+
+    platforms.forEach(function (p) {
+      ctx.fillStyle = "#6b4429";
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.fillStyle = "#5a9c4a";
+      ctx.fillRect(p.x, p.y, p.w, 5);
+    });
+
+    collectibles.forEach(function (c) {
+      if (!c.collected) drawGlizzy(c);
+    });
+
+    drawGoal();
+    drawPlayer();
+
+    ctx.restore();
+  }
+
+  /* ---- State machine ------------------------------------------------------ */
+  function showOverlay(mode) {
+    overlay.hidden = false;
+    overlayStart.hidden = mode !== "start";
+    overlayResult.hidden = mode !== "result";
+  }
+
+  function startRun() {
+    gameState = "playing";
+    resetRun();
+    overlay.hidden = true;
+    submitBox.hidden = true;
+    submitBox.classList.remove("submitted");
+    submitBox.querySelectorAll(".score-submit-note").forEach(function (n) {
+      n.remove();
+    });
+    nameInput.value = "";
+    submitBtn.disabled = false;
+    loop();
+  }
+
+  function endRun(success, reason) {
+    if (gameState !== "playing") return;
+    gameState = "result";
+    cancelAnimationFrame(rafId);
+
+    const elapsedSec = (performance.now() - startTime) / 1000;
+    let score = liveScore();
+    let message;
+    if (success) {
+      const timeBonus = Math.max(0, Math.round(100 - elapsedSec * 2));
+      score += 150 + timeBonus;
+      message = "Made it to The Shed in " + elapsedSec.toFixed(1) + "s!";
+    } else if (reason === "timeout") {
+      message = "Ran out the clock. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    } else {
+      message = "Down you go. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    }
+
+    scoreEl.textContent = String(score);
+    const best = Math.max(getBest(), score);
+    setBest(best);
+    bestEl.textContent = best;
+    pendingScore = score;
+    messageEl.textContent = message + " — " + score + " pts";
+    submitBox.hidden = !qualifiesForBoard(score);
+    showOverlay("result");
+  }
+
+  function loop() {
+    if (gameState !== "playing") return;
+    updatePhysics();
+    render();
+    if (gameState === "playing") rafId = requestAnimationFrame(loop);
+  }
+
+  /* ---- Input ------------------------------------------------------------ */
+  function bindHold(el, onDown, onUp) {
+    el.addEventListener("pointerdown", function (e) {
+      if (e.isTrusted === false) return;
+      e.preventDefault();
+      onDown();
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(function (evt) {
+      el.addEventListener(evt, onUp);
+    });
+  }
+  bindHold(
+    leftBtn,
+    function () { leftPressed = true; },
+    function () { leftPressed = false; }
+  );
+  bindHold(
+    rightBtn,
+    function () { rightPressed = true; },
+    function () { rightPressed = false; }
+  );
+  jumpBtn.addEventListener("pointerdown", function (e) {
+    if (e.isTrusted === false) return;
+    e.preventDefault();
+    jumpRequested = true;
+  });
+
+  window.addEventListener("keydown", function (e) {
+    if (gameState !== "playing" || e.isTrusted === false) return;
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") leftPressed = true;
+    if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") rightPressed = true;
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === " ") {
+      jumpRequested = true;
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", function (e) {
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") leftPressed = false;
+    if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") rightPressed = false;
+  });
+
+  startBtn.addEventListener("click", startRun);
+  retryBtn.addEventListener("click", startRun);
+  submitBtn.addEventListener("click", submitScore);
+  nameInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") submitScore();
+  });
+
+  resetRun();
+  render();
+  showOverlay("start");
 })();

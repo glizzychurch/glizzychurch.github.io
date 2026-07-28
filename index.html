@@ -142,6 +142,7 @@
 
         <div class="leaderboard" id="leaderboard">
           <p class="eyebrow on-dark leaderboard-title">Top Glizzy Chompers</p>
+          <p class="leaderboard-season" id="seasonLabel"></p>
           <ol class="leaderboard-list" id="leaderboardList">
             <li class="leaderboard-empty">Loading leaderboard…</li>
           </ol>
@@ -180,7 +181,59 @@
 
         <div class="leaderboard" id="ppLeaderboard">
           <p class="eyebrow on-dark leaderboard-title">Steadiest Hands</p>
+          <p class="leaderboard-season" id="ppSeasonLabel"></p>
           <ol class="leaderboard-list" id="ppLeaderboardList">
+            <li class="leaderboard-empty">Loading leaderboard…</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="game-panel reveal">
+        <p class="eyebrow on-dark">THE THIRD RITE</p>
+        <h3>Glizzy Gauntlet</h3>
+        <p>Left, right, jump. Get to The Shed before you eat dirt.</p>
+
+        <div class="platformer-stage">
+          <div class="platformer-hud">
+            <span>Score<br><b id="pfScore">0</b></span>
+            <span>Best<br><b id="pfBest">0</b></span>
+          </div>
+
+          <div class="platformer-canvas-wrap">
+            <canvas id="pfCanvas" width="400" height="220" aria-label="Glizzy Gauntlet game screen"></canvas>
+            <div class="platformer-overlay" id="pfOverlay">
+              <div id="pfOverlayStart">
+                <p class="overlay-title">Glizzy Gauntlet</p>
+                <p class="overlay-sub">◀ ▶ to move, ▲ to jump. Grab glizzies, don't fall in.</p>
+                <button class="btn btn-primary" id="pfStart">Start</button>
+              </div>
+              <div id="pfOverlayResult" hidden>
+                <p id="pfMessage"></p>
+                <div class="score-submit" id="pfSubmitBox" hidden>
+                  <p class="score-submit-prompt">Top 5! Put your name on it:</p>
+                  <div class="score-submit-row">
+                    <input type="text" id="pfNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
+                    <button class="btn btn-primary btn-small" id="pfSubmitBtn">Add</button>
+                  </div>
+                </div>
+                <button class="btn btn-primary" id="pfRetry">Try Again</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="platformer-controls" aria-hidden="false">
+            <div class="pf-dpad">
+              <button class="pf-btn" id="pfLeft" aria-label="Move left">◀</button>
+              <button class="pf-btn" id="pfRight" aria-label="Move right">▶</button>
+            </div>
+            <button class="pf-btn pf-btn-jump" id="pfJump" aria-label="Jump">▲<br>JUMP</button>
+          </div>
+        </div>
+
+        <div class="leaderboard" id="pfLeaderboard">
+          <p class="eyebrow on-dark leaderboard-title">Fastest to The Shed</p>
+          <p class="leaderboard-season" id="pfSeasonLabel"></p>
+          <ol class="leaderboard-list" id="pfLeaderboardList">
             <li class="leaderboard-empty">Loading leaderboard…</li>
           </ol>
         </div>
