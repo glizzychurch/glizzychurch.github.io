@@ -172,9 +172,11 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
   const GAME_LENGTH = 15;
   const BOARD_SIZE = 5;
+  const MIN_TAP_INTERVAL = 100; // ms — fastest interval a real tap gets credit for (10/sec ceiling)
   let score = 0;
   let timeLeft = GAME_LENGTH;
   let timer = null;
+  let lastTapTime = 0;
   let fallbackBest = 0;
   let currentTop = []; // kept in sync with the shared leaderboard, sorted high to low
 
@@ -237,8 +239,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
     if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard couldn\'t load.</li>';
   } else {
     try {
-      firebase.initializeApp(FIREBASE_CONFIG);
-      scoresRef = firebase.database().ref("scores");
+      const app = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(FIREBASE_CONFIG);
+      scoresRef = firebase.database(app).ref("scores");
       scoresRef.on(
         "value",
         function (snapshot) {
@@ -267,31 +269,12 @@ document.getElementById("year").textContent = new Date().getFullYear();
     if (currentTop.length < BOARD_SIZE) return true;
     return s > currentTop[currentTop.length - 1].score;
   }
-
-  function pruneToTop() {
-    if (!scoresRef) return;
-    scoresRef.once("value").then(function (snapshot) {
-      const val = snapshot.val() || {};
-      const all = Object.keys(val)
-        .map(function (key) {
-          return { key: key, score: val[key].score };
-        })
-        .sort(function (a, b) {
-          return b.score - a.score;
-        });
-      all.slice(BOARD_SIZE).forEach(function (entry) {
-        scoresRef.child(entry.key).remove();
-      });
-    });
-  }
-
   function submitScore() {
     if (!scoresRef) return;
     const name = (nameInput.value || "").trim().slice(0, 24) || "Anonymous Glizzy Fan";
     submitBtn.disabled = true;
     scoresRef
       .push({ name: name, score: score, ts: Date.now() })
-      .then(pruneToTop)
       .catch(function () {})
       .then(function () {
         submitBox.classList.add("submitted");
@@ -312,6 +295,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
   function startGame() {
     clearInterval(timer); // belt-and-suspenders: never let a stray interval survive a restart
     score = 0;
+    lastTapTime = 0;
     timeLeft = GAME_LENGTH;
     scoreEl.textContent = "0";
     timeEl.textContent = String(GAME_LENGTH);
@@ -345,8 +329,12 @@ document.getElementById("year").textContent = new Date().getFullYear();
     submitBox.hidden = !qualifiesForBoard(score);
   }
 
-  function chomp() {
+  function chomp(event) {
     if (target.disabled) return;
+    if (event && event.isTrusted === false) return; // synthetic/scripted click — not a real tap
+    const now = performance.now();
+    if (now - lastTapTime < MIN_TAP_INTERVAL) return; // too fast to be a real tap — ignored, not counted
+    lastTapTime = now;
     score += 1;
     scoreEl.textContent = String(score);
     target.classList.remove("pop");
@@ -357,6 +345,225 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
   startBtn.addEventListener("click", startGame);
   target.addEventListener("click", chomp);
+  submitBtn.addEventListener("click", submitScore);
+  nameInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") submitScore();
+  });
+})();
+
+/* ---------------------------------------------------------------------
+   Perfect Pour — tap to stop a rising beer fill as close to the target
+   line as possible without overflowing. Shares the same Firebase project
+   as Glizzy Chomp (see EDIT ME #3) but keeps its own leaderboard node
+   ("pourScores") since the scoring scale is completely different.
+--------------------------------------------------------------------- */
+(function perfectPour() {
+  const startBtn = document.getElementById("ppStart");
+  const glass = document.getElementById("ppGlass");
+  const liquid = document.getElementById("ppLiquid");
+  const fillEl = document.getElementById("ppFill");
+  const bestEl = document.getElementById("ppBest");
+  const resultEl = document.getElementById("ppResult");
+  const messageEl = document.getElementById("ppMessage");
+  const submitBox = document.getElementById("ppSubmitBox");
+  const nameInput = document.getElementById("ppNameInput");
+  const submitBtn = document.getElementById("ppSubmitBtn");
+  const leaderboardList = document.getElementById("ppLeaderboardList");
+  if (!startBtn || !glass) return;
+
+  const TARGET = 95; // percent full — the ideal pour
+  const MAX_TRACKED = 130; // percent — how far past full we keep tracking
+  const BOARD_SIZE = 5;
+
+  let rafId = null;
+  let startTime = 0;
+  let duration = 2600;
+  let currentFill = 0;
+  let pouring = false;
+  let pendingScore = 0;
+  let fallbackBest = 0;
+  let currentTop = [];
+
+  function getBest() {
+    try {
+      return parseInt(localStorage.getItem("perfectPourBest") || "0", 10);
+    } catch (e) {
+      return fallbackBest;
+    }
+  }
+  function setBest(v) {
+    try {
+      localStorage.setItem("perfectPourBest", String(v));
+    } catch (e) {
+      fallbackBest = v;
+    }
+  }
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  bestEl.textContent = getBest();
+
+  /* ---- Shared leaderboard --------------------------------------------- */
+  const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
+  let scoresRef = null;
+
+  function renderLeaderboard(entries) {
+    if (!leaderboardList) return;
+    if (!entries.length) {
+      leaderboardList.innerHTML = '<li class="leaderboard-empty">No pours yet — be the first.</li>';
+      return;
+    }
+    leaderboardList.innerHTML = entries
+      .map(function (e, i) {
+        const name = escapeHTML(String(e.name || "Anonymous Glizzy Fan").slice(0, 24));
+        return (
+          '<li class="' + (i === 0 ? "rank-1" : "") + '">' +
+          '<span class="lb-rank">' + (i + 1) + "</span>" +
+          '<span class="lb-name">' + name + "</span>" +
+          '<span class="lb-score">' + e.score + "</span>" +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+
+  if (!leaderboardConfigured) {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
+  } else if (typeof firebase === "undefined") {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard couldn\'t load.</li>';
+  } else {
+    try {
+      const app = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(FIREBASE_CONFIG);
+      scoresRef = firebase.database(app).ref("pourScores");
+      scoresRef.on(
+        "value",
+        function (snapshot) {
+          const val = snapshot.val() || {};
+          currentTop = Object.keys(val)
+            .map(function (key) {
+              return { key: key, name: val[key].name, score: val[key].score };
+            })
+            .sort(function (a, b) {
+              return b.score - a.score;
+            })
+            .slice(0, BOARD_SIZE);
+          renderLeaderboard(currentTop);
+        },
+        function () {
+          if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+        }
+      );
+    } catch (e) {
+      if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+    }
+  }
+
+  function qualifiesForBoard(s) {
+    if (!scoresRef || s <= 0) return false;
+    if (currentTop.length < BOARD_SIZE) return true;
+    return s > currentTop[currentTop.length - 1].score;
+  }
+  function submitScore() {
+    if (!scoresRef) return;
+    const name = (nameInput.value || "").trim().slice(0, 24) || "Anonymous Glizzy Fan";
+    submitBtn.disabled = true;
+    scoresRef
+      .push({ name: name, score: pendingScore, ts: Date.now() })
+      .catch(function () {})
+      .then(function () {
+        submitBox.classList.add("submitted");
+        const note = document.createElement("p");
+        note.className = "score-submit-note";
+        note.textContent = "Added! Steady hands indeed.";
+        submitBox.appendChild(note);
+      });
+  }
+
+  /* ---- Pour mechanics --------------------------------------------------- */
+  function messageFor(fill, score) {
+    if (fill > 100) return "Overflowed! Wasted a good beer.";
+    if (score >= 85) return "Perfect pour.";
+    if (score >= 60) return "Pretty good.";
+    if (score >= 30) return "Rookie move.";
+    return "Barely wet the glass.";
+  }
+
+  function scoreFor(fill) {
+    if (fill > 100) {
+      const over = fill - 100;
+      return Math.max(0, Math.round(40 - over * 4));
+    }
+    const distance = Math.abs(TARGET - fill);
+    return Math.max(0, Math.round(100 - distance * 3));
+  }
+
+  function setLiquidHeight(pct) {
+    const clamped = Math.max(0, Math.min(pct, MAX_TRACKED));
+    liquid.style.height = Math.min(clamped, 100) + "%";
+    fillEl.textContent = Math.round(Math.min(pct, 999)) + "%";
+    glass.classList.toggle("overflowing", pct > 100);
+  }
+
+  function frame(now) {
+    if (!pouring) return;
+    const elapsed = now - startTime;
+    currentFill = (elapsed / duration) * MAX_TRACKED;
+    setLiquidHeight(currentFill);
+    if (currentFill >= MAX_TRACKED) {
+      stopPour();
+      return;
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function startPour() {
+    resultEl.hidden = true;
+    submitBox.hidden = true;
+    submitBox.classList.remove("submitted");
+    submitBox.querySelectorAll(".score-submit-note").forEach(function (n) {
+      n.remove();
+    });
+    nameInput.value = "";
+    submitBtn.disabled = false;
+    startBtn.hidden = true;
+    startBtn.disabled = true;
+    glass.disabled = false;
+    glass.classList.remove("overflowing");
+    currentFill = 0;
+    setLiquidHeight(0);
+    duration = 2200 + Math.random() * 1200; // 2.2s–3.4s, randomized each round
+    pouring = true;
+    startTime = performance.now();
+    glass.focus();
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function stopPour(event) {
+    if (!pouring) return;
+    if (event && event.isTrusted === false) return; // synthetic/scripted click — not a real tap; the pour just keeps running
+    pouring = false;
+    cancelAnimationFrame(rafId);
+    glass.disabled = true;
+    startBtn.hidden = false;
+    startBtn.disabled = false;
+    startBtn.textContent = "Pour Again";
+
+    const finalFill = Math.round(currentFill * 10) / 10;
+    const score = scoreFor(finalFill);
+    pendingScore = score;
+    const best = Math.max(getBest(), score);
+    setBest(best);
+    bestEl.textContent = best;
+    messageEl.textContent = messageFor(finalFill, score) + " (" + Math.round(finalFill) + "% full, " + score + " pts)";
+    resultEl.hidden = false;
+    submitBox.hidden = !qualifiesForBoard(score);
+  }
+
+  startBtn.addEventListener("click", startPour);
+  glass.addEventListener("click", stopPour);
   submitBtn.addEventListener("click", submitScore);
   nameInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") submitScore();

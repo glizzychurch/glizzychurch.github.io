@@ -147,6 +147,44 @@
           </ol>
         </div>
       </div>
+
+      <div class="game-panel reveal">
+        <p class="eyebrow on-dark">COMMUNION, TIMED RIGHT</p>
+        <h3>Perfect Pour</h3>
+        <p>Tap to stop the pour. Too shy, too foamy, or all over the bar — you'll know.</p>
+        <div class="game-stage pour-stage">
+          <div class="pour-hud">
+            <span>Fill<br><b id="ppFill">0%</b></span>
+            <span>Best<br><b id="ppBest">0</b></span>
+          </div>
+          <div class="pour-glass-wrap">
+            <button class="pour-glass" id="ppGlass" disabled aria-label="Tap to stop pouring">
+              <span class="pour-target-line" aria-hidden="true"></span>
+              <span class="pour-liquid" id="ppLiquid" aria-hidden="true">
+                <span class="pour-foam" aria-hidden="true"></span>
+              </span>
+            </button>
+          </div>
+          <div class="game-result" id="ppResult" hidden>
+            <p id="ppMessage"></p>
+            <div class="score-submit" id="ppSubmitBox" hidden>
+              <p class="score-submit-prompt">Top 5! Put your name on it:</p>
+              <div class="score-submit-row">
+                <input type="text" id="ppNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
+                <button class="btn btn-primary btn-small" id="ppSubmitBtn">Add</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="ppStart">Pour</button>
+        </div>
+
+        <div class="leaderboard" id="ppLeaderboard">
+          <p class="eyebrow on-dark leaderboard-title">Steadiest Hands</p>
+          <ol class="leaderboard-list" id="ppLeaderboardList">
+            <li class="leaderboard-empty">Loading leaderboard…</li>
+          </ol>
+        </div>
+      </div>
     </div>
   </section>
 

@@ -460,6 +460,74 @@ button { font: inherit; }
   padding: 0.5em;
 }
 
+/* ---- Perfect Pour ------------------------------------------------- */
+.pour-stage { touch-action: manipulation; }
+.pour-hud {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  color: var(--sunset-gold) !important;
+}
+.pour-hud b { color: var(--trim-white) !important; font-size: 1rem; }
+
+.pour-glass-wrap { width: 140px; margin: 0 auto var(--space-3); }
+.pour-glass {
+  position: relative;
+  display: block;
+  width: 140px;
+  height: 200px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: rgba(251,245,232,0.08) !important;
+  clip-path: polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.pour-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%);
+  border: 4px solid var(--sunset-gold);
+  pointer-events: none;
+  transition: border-color 120ms ease;
+}
+.pour-glass:disabled { cursor: default; }
+.pour-glass.overflowing::after { border-color: var(--shed-red) !important; animation: pour-shake 320ms ease; }
+@keyframes pour-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+.pour-liquid {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 0%;
+  background: linear-gradient(180deg, #f2c46b 0%, var(--sunset-gold) 100%) !important;
+}
+.pour-foam {
+  position: absolute;
+  top: -6px; left: 0; right: 0;
+  height: 12px;
+  background: var(--trim-white) !important;
+  border-radius: 3px;
+  opacity: 0.92;
+}
+.pour-target-line {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 95%;
+  border-top: 2px dashed var(--brass);
+  z-index: 2;
+}
+
 /* ---- Shed-Fest -------------------------------------------------------- */
 .shedfest {
   background: var(--shed-red-deep) !important;
