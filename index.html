@@ -123,51 +123,70 @@
       </div>
 
       <div class="arcade-tabs reveal" role="tablist">
-        <button class="arcade-tab active" data-panel="chomp" role="tab" aria-selected="true">Glizzy Chomp</button>
+        <button class="arcade-tab active" data-panel="maze" role="tab" aria-selected="true">Glizzy Maze</button>
+        <button class="arcade-tab" data-panel="chomp" role="tab" aria-selected="false">Glizzy Chomp</button>
         <button class="arcade-tab" data-panel="pour" role="tab" aria-selected="false">Perfect Pour</button>
         <button class="arcade-tab" data-panel="gauntlet" role="tab" aria-selected="false">Glizzy Gauntlet</button>
-        <button class="arcade-tab" data-panel="maze" role="tab" aria-selected="false">Glizzy Maze</button>
       </div>
 
       <div class="arcade-frame reveal">
-      <div class="game-panel" data-panel="chomp">
-        <p class="eyebrow on-dark">PROVE YOUR DEVOTION</p>
-        <h3>Glizzy Chomp</h3>
-        <p>15 seconds. Tap the glizzy. Achieve sainthood.</p>
-        <div class="game-stage">
-          <div class="game-hud">
-            <span>Score<br><b id="gcScore">0</b></span>
-            <span>Time<br><b id="gcTime">15</b></span>
-            <span>Best<br><b id="gcBest">0</b></span>
-          </div>
-          <button class="glizzy-target" id="gcTarget" disabled aria-label="Tap the hot dog">
-            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-              <rect x="18" y="52" width="64" height="20" rx="10" fill="#e3b876" stroke="#1b2740" stroke-width="3"/>
-              <rect x="24" y="34" width="52" height="20" rx="10" fill="#b23a28" stroke="#1b2740" stroke-width="3"/>
-              <path d="M28,37 L38,29 L48,37 L58,29 L68,37" stroke="#f2a63d" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div class="game-result" id="gcResult" hidden>
-            <p id="gcRank"></p>
-            <div class="score-submit" id="scoreSubmit" hidden>
-              <p class="score-submit-prompt">Top 5! Put your name on it:</p>
-              <div class="score-submit-row">
-                <input type="text" id="gcNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
-                <button class="btn btn-primary btn-small" id="gcSubmitBtn">Add</button>
+      <div class="game-panel" data-panel="maze">
+          <p class="eyebrow on-dark">THE FOURTH RITE</p>
+          <h3>Glizzy Maze</h3>
+          <p>Clear every glizzy, dodge the crew.</p>
+
+          <div class="maze-stage">
+            <div class="maze-hud">
+              <span>Score<br><b id="mzScore">0</b></span>
+              <span>Best<br><b id="mzBest">0</b></span>
+              <button class="btn btn-small pause-btn" id="mzPause" hidden>Pause</button>
+            </div>
+
+            <div class="maze-canvas-wrap">
+              <canvas id="mzCanvas" width="442" height="546" aria-label="Glizzy Maze game screen"></canvas>
+              <div class="maze-overlay" id="mzOverlay">
+                <div id="mzOverlayStart">
+                  <p class="overlay-title">Glizzy Maze</p>
+                  <p class="overlay-sub">Swipe or tap the D-pad to move. Clear every glizzy, dodge the crew, grab a Cold One if you need the edge.</p>
+                  <button class="btn btn-primary" id="mzStart">Start</button>
+                </div>
+                <div id="mzOverlayResult" hidden>
+                  <p id="mzMessage"></p>
+                  <div class="score-submit" id="mzSubmitBox" hidden>
+                    <p class="score-submit-prompt">Top 5! Put your name on it:</p>
+                    <div class="score-submit-row">
+                      <input type="text" id="mzNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
+                      <button class="btn btn-primary btn-small" id="mzSubmitBtn">Add</button>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" id="mzRetry">Try Again</button>
+                </div>
+              </div>
+              <div class="pause-badge" id="mzPauseBadge" hidden>
+                <span>Paused</span>
+                <button class="btn btn-primary btn-small" id="mzResume">Resume</button>
               </div>
             </div>
-          </div>
-          <button class="btn btn-primary" id="gcStart">Start</button>
-        </div>
 
-        <div class="leaderboard" id="leaderboard">
-          <p class="eyebrow on-dark leaderboard-title">Top Glizzy Chompers</p>
-          <p class="leaderboard-season" id="seasonLabel"></p>
-          <ol class="leaderboard-list" id="leaderboardList">
-            <li class="leaderboard-empty">Loading leaderboard…</li>
-          </ol>
+            <div class="maze-swipe-zone" id="mzSwipeZone" aria-hidden="true">
+              <span class="mz-swipe-arrow mz-swipe-up">▲</span>
+              <span class="mz-swipe-row">
+                <span class="mz-swipe-arrow mz-swipe-left">◀</span>
+                <span class="mz-swipe-hint">SWIPE TO MOVE</span>
+                <span class="mz-swipe-arrow mz-swipe-right">▶</span>
+              </span>
+              <span class="mz-swipe-arrow mz-swipe-down">▼</span>
+            </div>
+          </div>
+
+          <div class="leaderboard" id="mzLeaderboard">
+            <p class="eyebrow on-dark leaderboard-title">Longest Survivors</p>
+            <p class="leaderboard-season" id="mzSeasonLabel"></p>
+            <ol class="leaderboard-list" id="mzLeaderboardList">
+              <li class="leaderboard-empty">Loading leaderboard…</li>
+            </ol>
+          </div>
         </div>
-      </div>
 
       <div class="game-panel" data-panel="pour" hidden>
         <p class="eyebrow on-dark">COMMUNION, TIMED RIGHT</p>
@@ -265,67 +284,44 @@
           </ol>
         </div>
       </div>
-        <div class="game-panel" data-panel="maze" hidden>
-          <p class="eyebrow on-dark">THE FOURTH RITE</p>
-          <h3>Glizzy Maze</h3>
-          <p>Clear every glizzy, dodge the crew.</p>
-
-          <div class="maze-stage">
-            <div class="maze-hud">
-              <span>Score<br><b id="mzScore">0</b></span>
-              <span>Best<br><b id="mzBest">0</b></span>
-              <button class="btn btn-small pause-btn" id="mzPause" hidden>Pause</button>
-            </div>
-
-            <div class="maze-canvas-wrap">
-              <canvas id="mzCanvas" width="442" height="546" aria-label="Glizzy Maze game screen"></canvas>
-              <div class="maze-overlay" id="mzOverlay">
-                <div id="mzOverlayStart">
-                  <p class="overlay-title">Glizzy Maze</p>
-                  <p class="overlay-sub">Swipe or tap the D-pad to move. Clear every glizzy, dodge the crew, grab a Cold One if you need the edge.</p>
-                  <button class="btn btn-primary" id="mzStart">Start</button>
-                </div>
-                <div id="mzOverlayResult" hidden>
-                  <p id="mzMessage"></p>
-                  <div class="score-submit" id="mzSubmitBox" hidden>
-                    <p class="score-submit-prompt">Top 5! Put your name on it:</p>
-                    <div class="score-submit-row">
-                      <input type="text" id="mzNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
-                      <button class="btn btn-primary btn-small" id="mzSubmitBtn">Add</button>
-                    </div>
-                  </div>
-                  <button class="btn btn-primary" id="mzRetry">Try Again</button>
-                </div>
-              </div>
-              <div class="pause-badge" id="mzPauseBadge" hidden>
-                <span>Paused</span>
-                <button class="btn btn-primary btn-small" id="mzResume">Resume</button>
-              </div>
-            </div>
-
-            <div class="maze-controls" aria-hidden="false">
-              <div class="mz-dpad-grid">
-                <span></span>
-                <button class="pf-btn mz-btn" id="mzUp" aria-label="Move up">▲</button>
-                <span></span>
-                <button class="pf-btn mz-btn" id="mzLeft" aria-label="Move left">◀</button>
-                <span class="mz-dpad-center"></span>
-                <button class="pf-btn mz-btn" id="mzRight" aria-label="Move right">▶</button>
-                <span></span>
-                <button class="pf-btn mz-btn" id="mzDown" aria-label="Move down">▼</button>
-                <span></span>
+        <div class="game-panel" data-panel="chomp" hidden>
+        <p class="eyebrow on-dark">PROVE YOUR DEVOTION</p>
+        <h3>Glizzy Chomp</h3>
+        <p>15 seconds. Tap the glizzy. Achieve sainthood.</p>
+        <div class="game-stage">
+          <div class="game-hud">
+            <span>Score<br><b id="gcScore">0</b></span>
+            <span>Time<br><b id="gcTime">15</b></span>
+            <span>Best<br><b id="gcBest">0</b></span>
+          </div>
+          <button class="glizzy-target" id="gcTarget" disabled aria-label="Tap the hot dog">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <rect x="18" y="52" width="64" height="20" rx="10" fill="#e3b876" stroke="#1b2740" stroke-width="3"/>
+              <rect x="24" y="34" width="52" height="20" rx="10" fill="#b23a28" stroke="#1b2740" stroke-width="3"/>
+              <path d="M28,37 L38,29 L48,37 L58,29 L68,37" stroke="#f2a63d" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div class="game-result" id="gcResult" hidden>
+            <p id="gcRank"></p>
+            <div class="score-submit" id="scoreSubmit" hidden>
+              <p class="score-submit-prompt">Top 5! Put your name on it:</p>
+              <div class="score-submit-row">
+                <input type="text" id="gcNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
+                <button class="btn btn-primary btn-small" id="gcSubmitBtn">Add</button>
               </div>
             </div>
           </div>
-
-          <div class="leaderboard" id="mzLeaderboard">
-            <p class="eyebrow on-dark leaderboard-title">Longest Survivors</p>
-            <p class="leaderboard-season" id="mzSeasonLabel"></p>
-            <ol class="leaderboard-list" id="mzLeaderboardList">
-              <li class="leaderboard-empty">Loading leaderboard…</li>
-            </ol>
-          </div>
+          <button class="btn btn-primary" id="gcStart">Start</button>
         </div>
+
+        <div class="leaderboard" id="leaderboard">
+          <p class="eyebrow on-dark leaderboard-title">Top Glizzy Chompers</p>
+          <p class="leaderboard-season" id="seasonLabel"></p>
+          <ol class="leaderboard-list" id="leaderboardList">
+            <li class="leaderboard-empty">Loading leaderboard…</li>
+          </ol>
+        </div>
+      </div>
       </div>
     </div>
   </section>

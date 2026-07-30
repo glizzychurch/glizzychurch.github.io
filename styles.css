@@ -57,6 +57,11 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
+body.game-scroll-lock {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: none;
+}
 img { max-width: 100%; display: block; }
 a { color: inherit !important; }
 h1, h2, h3, h4 { font-family: var(--font-display); margin: 0; line-height: 1.1; }
@@ -979,23 +984,39 @@ button { font: inherit; }
   line-height: 1.4;
 }
 
-.maze-controls {
+.maze-swipe-zone {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 0.5em;
+  max-width: 480px;
+  aspect-ratio: 1 / 1;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-2);
+  border: 2px dashed rgba(242,166,61,0.45);
+  border-radius: 12px;
+  background: rgba(251,245,232,0.03);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-.mz-dpad-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 54px);
-  grid-template-rows: repeat(3, 54px);
-  gap: 0.4em;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
+.mz-swipe-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2em;
 }
-.mz-btn { width: 54px; height: 54px; }
-.mz-dpad-center { width: 54px; height: 54px; }
+.mz-swipe-arrow {
+  color: rgba(242,166,61,0.7) !important;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+.mz-swipe-hint {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: rgba(251,245,232,0.55) !important;
+  white-space: nowrap;
+}

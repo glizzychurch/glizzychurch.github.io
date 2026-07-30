@@ -1259,10 +1259,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const submitBtn = document.getElementById("mzSubmitBtn");
   const leaderboardList = document.getElementById("mzLeaderboardList");
   const seasonLabel = document.getElementById("mzSeasonLabel");
-  const upBtn = document.getElementById("mzUp");
-  const downBtn = document.getElementById("mzDown");
-  const leftBtn = document.getElementById("mzLeft");
-  const rightBtn = document.getElementById("mzRight");
+  const swipeZone = document.getElementById("mzSwipeZone");
 
   /* ---- Maze data ---------------------------------------------------------
      Modeled loosely on the real backyard: pool + shed together, a deck
@@ -2263,6 +2260,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     nameInput.value = "";
     submitBtn.disabled = false;
     pauseBtn.hidden = false;
+    setPageScrollLocked(true);
     render();
     rafId = requestAnimationFrame(tick);
   }
@@ -2289,6 +2287,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     gameState = "result";
     cancelAnimationFrame(rafId);
     pauseBtn.hidden = true;
+    setPageScrollLocked(false);
 
     pendingScore = score;
     const best = Math.max(getBest(), score);
@@ -2305,25 +2304,17 @@ document.getElementById("year").textContent = new Date().getFullYear();
     if (gameState !== "playing") return;
     player.nextDir = { dx: dx, dy: dy };
   }
-  function bindTap(el, dx, dy) {
-    el.addEventListener("pointerdown", function (e) {
-      if (e.isTrusted === false) return;
-      e.preventDefault();
-      setDir(dx, dy);
-    });
-  }
-  bindTap(upBtn, 0, -1);
-  bindTap(downBtn, 0, 1);
-  bindTap(leftBtn, -1, 0);
-  bindTap(rightBtn, 1, 0);
 
-  // Swipe controls on the canvas itself — easier than the d-pad buttons on
-  // mobile, especially for quick direction changes mid-chase.
-  (function setupSwipe() {
+  // Swipe controls — bound to both the canvas and the swipe zone below it,
+  // so the whole game area responds the same way. This is the only touch
+  // control now; the on-screen d-pad didn't work well on mobile or desktop
+  // trackpads, so it's gone in favor of swipe everywhere + keyboard.
+  function setupSwipeOn(el) {
+    if (!el) return;
     const SWIPE_MIN_PX = 18; // ignore tiny accidental touches
     let touchStartX = 0, touchStartY = 0, tracking = false;
 
-    canvas.addEventListener(
+    el.addEventListener(
       "touchstart",
       function (e) {
         if (e.isTrusted === false || e.touches.length !== 1) return;
@@ -2334,18 +2325,15 @@ document.getElementById("year").textContent = new Date().getFullYear();
       { passive: true }
     );
 
-    canvas.addEventListener(
+    el.addEventListener(
       "touchmove",
       function (e) {
-        // Block the page from scrolling/bouncing while swiping on the game —
-        // touch-action:none on the canvas covers most browsers, this is the
-        // explicit backup so a fast swipe can never drag the page instead.
         if (tracking) e.preventDefault();
       },
       { passive: false }
     );
 
-    canvas.addEventListener("touchend", function (e) {
+    el.addEventListener("touchend", function (e) {
       if (e.isTrusted === false || !tracking) return;
       tracking = false;
       const touch = e.changedTouches[0];
@@ -2357,18 +2345,18 @@ document.getElementById("year").textContent = new Date().getFullYear();
       else setDir(0, dy > 0 ? 1 : -1);
     });
 
-    canvas.addEventListener("touchcancel", function () {
+    el.addEventListener("touchcancel", function () {
       tracking = false;
     });
-  })();
+  }
+  setupSwipeOn(canvas);
+  setupSwipeOn(swipeZone);
 
-  // Backup for the CSS touch-action:none above — belt and suspenders so a
-  // stray drag anywhere in the game area (including the gaps between the
-  // d-pad buttons) can never grab the page and scroll it while playing.
+  // Full-page scroll lock while actively playing or paused — belt and
+  // suspenders on top of the touch-action:none CSS. A stray swipe starting
+  // just outside the game area (not just inside it) can't drag the page.
   (function lockDownScrolling() {
-    const stageEl = document.querySelector(".maze-stage");
-    if (!stageEl) return;
-    stageEl.addEventListener(
+    document.addEventListener(
       "touchmove",
       function (e) {
         if (gameState === "playing" || gameState === "paused") e.preventDefault();
@@ -2376,6 +2364,10 @@ document.getElementById("year").textContent = new Date().getFullYear();
       { passive: false }
     );
   })();
+
+  function setPageScrollLocked(locked) {
+    document.body.classList.toggle("game-scroll-lock", locked);
+  }
 
   window.addEventListener("keydown", function (e) {
     if (gameState !== "playing" || e.isTrusted === false) return;

@@ -61,14 +61,15 @@ change a file in the repo.
 
 ## About the Arcade section
 
-All the games live in one section now (tab bar at the top: Glizzy Chomp,
-Perfect Pour, Glizzy Gauntlet, Glizzy Maze), instead of being stacked
-one after another down the page. Only the selected game is actually
-rendered — the others sit hidden — so adding more games later doesn't
-make the page any longer. Each tab is just a button with a matching
-`data-panel` value on both the tab and its game panel in `index.html`;
-adding a 5th game later means adding one more tab button and one more
-panel with the same `data-panel` name, no other wiring needed.
+All the games live in one section now (tab bar at the top: Glizzy Maze,
+Glizzy Chomp, Perfect Pour, Glizzy Gauntlet), instead of being stacked
+one after another down the page. Glizzy Maze is the default tab shown
+when the section loads. Only the selected game is actually rendered —
+the others sit hidden — so adding more games later doesn't make the
+page any longer. Each tab is just a button with a matching `data-panel`
+value on both the tab and its game panel in `index.html`; adding a 5th
+game later means adding one more tab button and one more panel with the
+same `data-panel` name, no other wiring needed.
 
 ## About the Glizzy Chomp game
 
@@ -194,12 +195,14 @@ clock, bonus items about to expire) gets shifted forward by however long
 the pause lasted, so stepping away for a minute doesn't secretly cost
 you a power-up or drop a chaser back into a state it shouldn't be in yet.
 
-On top of the on-screen d-pad, you can also just **swipe** on the game
-screen itself to move — swipe left/right/up/down in the direction you
-want to go. The whole game area (canvas and d-pad both, including the
-gaps between the direction buttons) blocks the page from scrolling while
-you're touching it, so a fast swipe anywhere near the controls won't
-drag the whole site around underneath you.
+On mobile, movement is swipe-only now — swipe left/right/up/down
+anywhere on the game screen or in the swipe zone below it (the on-screen
+d-pad is gone; it didn't work well on touch or trackpads, and one clear
+gesture area is more reliable than four small buttons). On desktop,
+keyboard controls are unchanged: arrow keys or WASD. The whole page is
+locked from scrolling while a run is in progress or paused — a fast
+swipe anywhere near the game, even starting outside the game area
+itself, can't drag the site around underneath you.
 
 **The four chasers** are humanoid now (not ghost blobs), each with a
 prop that makes them recognizable at a glance, plus real distinct
