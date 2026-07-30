@@ -1,8 +1,8 @@
 # The Shed — website
 
 The story, the build, the rites (hot dogs and drinks), this year's Shed-Fest
-lineup, a photo archive, and a little tap game. Plain HTML/CSS/JS — no build
-tools, no accounts required to run it, and it costs nothing to host.
+lineup, a photo archive, and a small arcade of games. Plain HTML/CSS/JS — no
+build tools, no accounts required to run it, and it costs nothing to host.
 
 ## See it before you publish it
 
@@ -59,9 +59,20 @@ will look right once it's actually online.
 Free forever, no domain purchase, updates automatically whenever you
 change a file in the repo.
 
+## About the Arcade section
+
+All the games live in one section now (tab bar at the top: Glizzy Chomp,
+Perfect Pour, Glizzy Gauntlet, Glizzy Maze), instead of being stacked
+one after another down the page. Only the selected game is actually
+rendered — the others sit hidden — so adding more games later doesn't
+make the page any longer. Each tab is just a button with a matching
+`data-panel` value on both the tab and its game panel in `index.html`;
+adding a 5th game later means adding one more tab button and one more
+panel with the same `data-panel` name, no other wiring needed.
+
 ## About the Glizzy Chomp game
 
-It's a 15-second tap game in the Rites section. Ranks:
+It's a 15-second tap game in the Arcade section. Ranks:
 
 | Score | Rank |
 |---|---|
@@ -86,25 +97,40 @@ of anything below.
 
 ## About the Perfect Pour game
 
-The second game in the Rites section, next to Glizzy Chomp. Tap **Pour**,
-then tap the glass to stop it — the dashed line marks the target (95%
-full). The fill speed is randomized each round (2.2–3.4 seconds) so it
-can't be beaten by pure muscle memory. Scoring:
+The second game in the Arcade section. Tap **Pour**, then tap the glass to
+stop it — the dashed line marks the target (95% full). Land it well and
+the next glass queues up immediately, a little faster than the last one.
+Miss badly and the streak's over.
 
-- Land right on the line → up to 100 points
-- Under-pour → points drop off the further you are from the line
-- Overflow (over 100%) → a much harsher penalty, capped at 40 points max
+**Scoring:** every pour is scored off the *true* decimal fill percentage
+(not rounded to a whole number), so "great" pours land at things like
+99.94 or 98.71 instead of piling up on a single number 100 — that's what
+was causing the leaderboard to fill up with identical scores before.
+
+**Streak mechanics:**
+- A pour continues the streak only if it lands between 90% and 100% full.
+  Anything under 90%, or any overflow past 100%, ends the run immediately
+  — no forgiveness, no cash-out partway through.
+- Each successful pour adds its score to a running session total. *That's*
+  what raises the ceiling — one great pour tops out near 100, but a real
+  streak can land 500+.
+- The fill speed gets faster after every successful round (with a little
+  randomness mixed in so it's never exactly predictable), down to a floor
+  where it stops getting harder — otherwise a long streak would eventually
+  become physically unplayable rather than just difficult.
+- Whatever you'd banked when the streak ends is what gets submitted to
+  the leaderboard.
 
 **A note on cheating:** the obvious exploit here is a script reading the
 live fill number and clicking at the exact right instant for a "perfect"
-100 every time. The stop-click now only counts if it's a genuine
+pour every time. The stop-click only counts if it's a genuine
 browser-trusted click (`event.isTrusted`) — a real tap, real mouse click,
 or a real automation tool driving actual input all still count, but a
 plain scripted `.click()` call (the easy, common way someone would try
 this) gets silently ignored. The pour just keeps running past the target
-instead, which usually ends in an overflow — so the exploit doesn't just
-fail, it actively backfires. Glizzy Chomp's tap handler has the same
-check for good measure.
+instead, which usually ends the streak in an overflow — so the exploit
+doesn't just fail, it actively backfires. Glizzy Chomp's tap handler has
+the same check for good measure.
 
 ## About the Glizzy Gauntlet game
 
@@ -134,9 +160,104 @@ maximum jump at about 99px horizontal / 100px vertical — keep new gaps
 and platform heights under that with some margin, or a jump literally
 becomes impossible to make.
 
+## About the Glizzy Maze game
+
+The fourth game — a small Pac-Man-style chase, canvas-rendered, grid-based
+movement. Arrow keys / WASD or the on-screen d-pad. Clear every glizzy in
+the yard while four chasers try to catch you. Grab a "Cold One" (the
+glowing power pellet in each corner) to turn the tables for a few seconds
+— chasers turn vulnerable and you can eat them for an escalating bonus
+(200, 400, 800, 1600 for a perfect run of four in one window). Watermelon,
+popsicle, and horse bonus items occasionally appear near the pool for
+extra points.
+
+The maze is laid out like the actual backyard — pool and shed together
+(with a grey concrete patio ring around the pool), a wooden deck
+connecting to the house, the garage and driveway off to the side, a few
+trees scattered around. There's a tunnel on the left and right edges at
+the top of the yard (classic Pac-Man wraparound) — walk off one side and
+you come out the other.
+
+There's a ~2 second safe-start at the beginning of every run — the crew
+just wanders harmlessly for a moment before they start actually hunting,
+same idea as the "ghosts leave the house gradually" pacing in the
+original game. Without it, a chaser spawning close to you could end the
+run before you'd even gotten your bearings.
+
+Both this game and Glizzy Gauntlet have a **Pause** button next to the
+score while playing. Pausing shows a small "Paused" badge, not a full
+screen-darkening overlay — the map and everyone's positions stay fully
+visible underneath, on purpose, so you can actually look around while
+stopped. It's also not just a visual freeze: every timed thing in the
+game (fright mode, a chaser's next "sober" burst, the grace-period
+clock, bonus items about to expire) gets shifted forward by however long
+the pause lasted, so stepping away for a minute doesn't secretly cost
+you a power-up or drop a chaser back into a state it shouldn't be in yet.
+
+On top of the on-screen d-pad, you can also just **swipe** on the game
+screen itself to move — swipe left/right/up/down in the direction you
+want to go. The whole game area (canvas and d-pad both, including the
+gaps between the direction buttons) blocks the page from scrolling while
+you're touching it, so a fast swipe anywhere near the controls won't
+drag the whole site around underneath you.
+
+**The four chasers** are humanoid now (not ghost blobs), each with a
+prop that makes them recognizable at a glance, plus real distinct
+behavior rather than reskinned copies of each other:
+- **Buschman** — cap, and a beer can in hand, Busch blue color scheme.
+  Mostly drifts harmlessly, but periodically "sobers up" for a few
+  seconds and beelines an accurate, faster intercept — watch for the
+  eyes snapping open, that's your warning.
+- **Spore Loser** — the classic red-and-white toadstool cap, plus a
+  short psychedelic color-cycling trail behind him as he moves. Hunts
+  you directly and gets faster the closer he gets. Juke him enough
+  times in a row (get close, then escape, repeated) and he rage-quits —
+  vanishes for a few seconds before respawning.
+- **Stable Hand** — dark hair, hard hat, and a hammer in hand. The
+  weakest chaser, slower and partly random — until the horse shows up
+  (see below), at which point he gets heart eyes, a burst of speed, and
+  makes a beeline for it, ignoring everything else.
+- **The Glitch** — brown hair, glasses, a faint flicker in his own
+  outline, and a soft smoke-wisp trail. Moves close to randomly, no real
+  pattern to learn, and has one shortcut tile pair through the pool that
+  only he can use.
+
+**The horse** walks a straight line across the yard, tunnel entrance to
+tunnel entrance — not a wandering NPC, not a collectible. The first one
+shows up quickly (3-6 seconds into a run, so nobody misses it), then
+every 14-24 seconds after that (randomized) another one walks through.
+It's purely a distraction: there's no bonus for reaching it yourself,
+its entire job is pulling Stable Hand off whatever he was doing. The
+moment it appears, he gets big heart eyes, a speed boost, and makes a
+dead-straight beeline for it until it's gone.
+
+The player character is the same hot-dog mascot from Glizzy Gauntlet
+(same body, drawn the same way), topped with a tall pope hat — a nod to
+"Pope Glizzicus" from the Glizzy Chomp leaderboard.
+
+**Scoring:** 10 pts per glizzy, 50 per power pellet, the escalating
+chaser-eat bonus above, 100–150 per bonus item, and 1000 for clearing
+every cap in the yard. Getting caught (while not powered up) or clearing
+the board both end the run and submit whatever you'd built.
+
+**A note on cheating:** movement inputs only count if they're genuine
+browser-trusted events, same pattern as the other three games — a script
+firing synthetic key or click events on the controls gets silently
+ignored.
+
+**If you ever want to tweak the maze:** it's a plain 2D array generated
+near the top of the Glizzy Maze section in `script.js`, built from named
+zones (`fillBlock` calls for the pool, shed, garage, house, deck,
+driveway, and trees) rather than a hand-typed grid — easier to move a
+whole feature at once than to hand-edit individual tiles. If you resize
+or reshape anything, run a quick connectivity check before trusting it —
+a maze with an unreachable pocket will strand pellets no one can ever
+collect. `GLITCH_TILES` marks the one shortcut only that character can
+use, currently a cut straight through the pool.
+
 ## Setting up the shared leaderboard (top 5, optional)
 
-Without this, all three games still work fine — each just skips its
+Without this, all four games still work fine — each just skips its
 shared board. With it, everyone's scores show up on the same top-5 list
 per game, and anyone who makes a top 5 gets a name field to claim their
 spot. All three boards run on Firebase's free tier (Realtime Database),
@@ -153,16 +274,16 @@ rather than relying on anything automatic.
 So a fresh 100 always outranks an old 100 — the board keeps some
 movement instead of freezing on whoever got there first.
 
-**Starting a new season:** all three boards (Glizzy Chomp, Perfect Pour,
-Glizzy Gauntlet) share one "season" marker. Nothing is ever deleted — this
-just changes the cutoff for what counts toward the current top 5, so old
-scores stay in the database but drop off the visible board. To start a
-fresh season, open your live site, open the browser console (F12, or
-right-click → Inspect → Console), and run:
+**Starting a new season:** all four boards (Glizzy Chomp, Perfect Pour,
+Glizzy Gauntlet, Glizzy Maze) share one "season" marker. Nothing is ever
+deleted — this just changes the cutoff for what counts toward the current
+top 5, so old scores stay in the database but drop off the visible board.
+To start a fresh season, open your live site, open the browser console
+(F12, or right-click → Inspect → Console), and run:
 ```js
 firebase.database().ref('season/startedAt').set(Date.now())
 ```
-All three leaderboards update instantly for everyone. To go back to an
+All four leaderboards update instantly for everyone. To go back to an
 all-time board with no cutoff, run the same command with `null` instead
 of `Date.now()`.
 
@@ -194,7 +315,7 @@ of `Date.now()`.
          ".write": true,
          ".indexOn": "score",
          "$entry": {
-           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100"
+           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 3000"
          }
        },
        "platformerScores": {
@@ -205,6 +326,14 @@ of `Date.now()`.
            ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 500"
          }
        },
+       "mazeScores": {
+         ".read": true,
+         ".write": true,
+         ".indexOn": "score",
+         "$entry": {
+           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 15000"
+         }
+       },
        "season": {
          ".read": true,
          ".write": true
@@ -212,7 +341,7 @@ of `Date.now()`.
      }
    }
    ```
-   This keeps all three boards open to anyone (no login needed to play or
+   This keeps all four boards open to anyone (no login needed to play or
    submit a score — appropriate for a small friend-group toy leaderboard)
    while rejecting junk data that doesn't look like a real score.
 5. Click the gear icon (top left) → **Project settings** → scroll to

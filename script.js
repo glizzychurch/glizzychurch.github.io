@@ -86,6 +86,27 @@ document.getElementById("year").textContent = new Date().getFullYear();
   });
 })();
 
+// Arcade tabs
+(function setupArcadeTabs() {
+  const tabs = document.querySelectorAll(".arcade-tab");
+  const panels = document.querySelectorAll(".arcade-frame .game-panel[data-panel]");
+  if (!tabs.length) return;
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      const target = tab.getAttribute("data-panel");
+      tabs.forEach(function (t) {
+        const isActive = t === tab;
+        t.classList.toggle("active", isActive);
+        t.setAttribute("aria-selected", String(isActive));
+      });
+      panels.forEach(function (panel) {
+        panel.hidden = panel.getAttribute("data-panel") !== target;
+      });
+    });
+  });
+})();
+
 // Gallery cards
 (function renderAlbums() {
   const grid = document.getElementById("albumGrid");
@@ -387,7 +408,9 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const glass = document.getElementById("ppGlass");
   const liquid = document.getElementById("ppLiquid");
   const fillEl = document.getElementById("ppFill");
+  const streakEl = document.getElementById("ppStreak");
   const bestEl = document.getElementById("ppBest");
+  const roundFlashEl = document.getElementById("ppRoundFlash");
   const resultEl = document.getElementById("ppResult");
   const messageEl = document.getElementById("ppMessage");
   const submitBox = document.getElementById("ppSubmitBox");
@@ -398,8 +421,14 @@ document.getElementById("year").textContent = new Date().getFullYear();
   if (!startBtn || !glass) return;
 
   const TARGET = 95; // percent full — the ideal pour
-  const MAX_TRACKED = 130; // percent — how far past full we keep tracking
+  const SUCCESS_MIN = 90; // fill must land in [SUCCESS_MIN, 100] to continue the streak
+  const MAX_TRACKED = 130; // percent — how far past full we keep tracking, for overflow visuals
   const BOARD_SIZE = 5;
+  const INITIAL_DURATION_MIN = 2200;
+  const INITIAL_DURATION_MAX = 3400;
+  const DURATION_STEP = 200; // ms faster each successful round
+  const MIN_DURATION = 900; // floor — never gets faster than this
+  const ROUND_FLASH_MS = 700;
 
   let rafId = null;
   let startTime = 0;
@@ -409,10 +438,14 @@ document.getElementById("year").textContent = new Date().getFullYear();
   let pendingScore = 0;
   let fallbackBest = 0;
   let currentTop = [];
+  let streakCount = 0;
+  let sessionScore = 0;
+  let sessionInitialDuration = 2600;
+  let autoContinueTimer = null;
 
   function getBest() {
     try {
-      return parseInt(localStorage.getItem("perfectPourBest") || "0", 10);
+      return parseFloat(localStorage.getItem("perfectPourBest") || "0");
     } catch (e) {
       return fallbackBest;
     }
@@ -430,7 +463,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     return div.innerHTML;
   }
 
-  bestEl.textContent = getBest();
+  bestEl.textContent = getBest().toFixed(2);
 
   /* ---- Shared leaderboard --------------------------------------------- */
   const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
@@ -447,11 +480,12 @@ document.getElementById("year").textContent = new Date().getFullYear();
     leaderboardList.innerHTML = entries
       .map(function (e, i) {
         const name = escapeHTML(String(e.name || "Anonymous Glizzy Fan").slice(0, 24));
+        const scoreDisplay = Number(e.score).toFixed(2);
         return (
           '<li class="' + (i === 0 ? "rank-1" : "") + '">' +
           '<span class="lb-rank">' + (i + 1) + "</span>" +
           '<span class="lb-name">' + name + "</span>" +
-          '<span class="lb-score">' + e.score + "</span>" +
+          '<span class="lb-score">' + scoreDisplay + "</span>" +
           "</li>"
         );
       })
@@ -532,28 +566,25 @@ document.getElementById("year").textContent = new Date().getFullYear();
   }
 
   /* ---- Pour mechanics --------------------------------------------------- */
-  function messageFor(fill, score) {
-    if (fill > 100) return "Overflowed! Wasted a good beer.";
-    if (score >= 85) return "Perfect pour.";
-    if (score >= 60) return "Pretty good.";
-    if (score >= 30) return "Rookie move.";
-    return "Barely wet the glass.";
-  }
-
   function scoreFor(fill) {
-    if (fill > 100) {
-      const over = fill - 100;
-      return Math.max(0, Math.round(40 - over * 4));
-    }
+    // Distance-based curve off the true (decimal) fill percentage — no
+    // rounding before this point, so landing "perfect" is vanishingly rare
+    // and near-misses each get their own distinct score.
     const distance = Math.abs(TARGET - fill);
-    return Math.max(0, Math.round(100 - distance * 3));
+    return Math.max(0, 100 - distance * 3);
   }
 
   function setLiquidHeight(pct) {
     const clamped = Math.max(0, Math.min(pct, MAX_TRACKED));
     liquid.style.height = Math.min(clamped, 100) + "%";
-    fillEl.textContent = Math.round(Math.min(pct, 999)) + "%";
+    fillEl.textContent = Math.min(pct, 999).toFixed(1) + "%";
     glass.classList.toggle("overflowing", pct > 100);
+  }
+
+  function durationForRound(roundNumber) {
+    const base = Math.max(MIN_DURATION, sessionInitialDuration - (roundNumber - 1) * DURATION_STEP);
+    const jitter = (Math.random() - 0.5) * 300;
+    return Math.max(MIN_DURATION, base + jitter);
   }
 
   function frame(now) {
@@ -568,7 +599,20 @@ document.getElementById("year").textContent = new Date().getFullYear();
     rafId = requestAnimationFrame(frame);
   }
 
-  function startPour() {
+  function beginRound() {
+    glass.disabled = false;
+    glass.classList.remove("overflowing");
+    currentFill = 0;
+    setLiquidHeight(0);
+    duration = durationForRound(streakCount + 1);
+    pouring = true;
+    startTime = performance.now();
+    glass.focus();
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function startSession() {
+    clearTimeout(autoContinueTimer);
     resultEl.hidden = true;
     submitBox.hidden = true;
     submitBox.classList.remove("submitted");
@@ -579,15 +623,44 @@ document.getElementById("year").textContent = new Date().getFullYear();
     submitBtn.disabled = false;
     startBtn.hidden = true;
     startBtn.disabled = true;
-    glass.disabled = false;
-    glass.classList.remove("overflowing");
-    currentFill = 0;
-    setLiquidHeight(0);
-    duration = 2200 + Math.random() * 1200; // 2.2s–3.4s, randomized each round
-    pouring = true;
-    startTime = performance.now();
-    glass.focus();
-    rafId = requestAnimationFrame(frame);
+    streakCount = 0;
+    sessionScore = 0;
+    streakEl.textContent = "0";
+    sessionInitialDuration = INITIAL_DURATION_MIN + Math.random() * (INITIAL_DURATION_MAX - INITIAL_DURATION_MIN);
+    beginRound();
+  }
+
+  function showRoundFlash(text) {
+    roundFlashEl.textContent = text;
+    roundFlashEl.classList.remove("show");
+    // eslint-disable-next-line no-unused-expressions
+    roundFlashEl.offsetWidth; // restart the animation
+    roundFlashEl.classList.add("show");
+  }
+
+  function endSession(finalFill) {
+    startBtn.hidden = false;
+    startBtn.disabled = false;
+    startBtn.textContent = "Pour Again";
+
+    const roundedTotal = Math.round(sessionScore * 100) / 100;
+    pendingScore = roundedTotal;
+    const best = Math.max(getBest(), roundedTotal);
+    setBest(best);
+    bestEl.textContent = best.toFixed(2);
+
+    const failMsg =
+      finalFill > 100
+        ? "Overflowed at " + finalFill.toFixed(2) + "%."
+        : "Only hit " + finalFill.toFixed(2) + "% — needed at least " + SUCCESS_MIN + "%.";
+
+    messageEl.textContent =
+      streakCount === 0
+        ? failMsg + " No streak this time."
+        : failMsg + " Streak of " + streakCount + " banked " + roundedTotal.toFixed(2) + " pts.";
+
+    resultEl.hidden = false;
+    submitBox.hidden = !qualifiesForBoard(roundedTotal);
   }
 
   function stopPour(event) {
@@ -596,22 +669,23 @@ document.getElementById("year").textContent = new Date().getFullYear();
     pouring = false;
     cancelAnimationFrame(rafId);
     glass.disabled = true;
-    startBtn.hidden = false;
-    startBtn.disabled = false;
-    startBtn.textContent = "Pour Again";
 
-    const finalFill = Math.round(currentFill * 10) / 10;
-    const score = scoreFor(finalFill);
-    pendingScore = score;
-    const best = Math.max(getBest(), score);
-    setBest(best);
-    bestEl.textContent = best;
-    messageEl.textContent = messageFor(finalFill, score) + " (" + Math.round(finalFill) + "% full, " + score + " pts)";
-    resultEl.hidden = false;
-    submitBox.hidden = !qualifiesForBoard(score);
+    const finalFill = Math.round(currentFill * 100) / 100; // 2-decimal precision
+    const success = finalFill >= SUCCESS_MIN && finalFill <= 100;
+
+    if (success) {
+      const roundScore = scoreFor(finalFill);
+      sessionScore += roundScore;
+      streakCount += 1;
+      streakEl.textContent = String(streakCount);
+      showRoundFlash("+" + roundScore.toFixed(2));
+      autoContinueTimer = setTimeout(beginRound, ROUND_FLASH_MS);
+    } else {
+      endSession(finalFill);
+    }
   }
 
-  startBtn.addEventListener("click", startPour);
+  startBtn.addEventListener("click", startSession);
   glass.addEventListener("click", stopPour);
   submitBtn.addEventListener("click", submitScore);
   nameInput.addEventListener("keydown", function (e) {
@@ -636,6 +710,9 @@ document.getElementById("year").textContent = new Date().getFullYear();
   const overlayResult = document.getElementById("pfOverlayResult");
   const startBtn = document.getElementById("pfStart");
   const retryBtn = document.getElementById("pfRetry");
+  const pauseBtn = document.getElementById("pfPause");
+  const resumeBtn = document.getElementById("pfResume");
+  const pauseBadge = document.getElementById("pfPauseBadge");
   const messageEl = document.getElementById("pfMessage");
   const submitBox = document.getElementById("pfSubmitBox");
   const nameInput = document.getElementById("pfNameInput");
@@ -938,6 +1015,21 @@ document.getElementById("year").textContent = new Date().getFullYear();
     ctx.beginPath();
     ctx.ellipse(0, -4, 9, 5, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Pope hat (mitre) — the "Pope Glizzicus" of it all
+    ctx.fillStyle = "#fbf5e8";
+    ctx.beginPath();
+    ctx.moveTo(-6, -8);
+    ctx.lineTo(-3, -19);
+    ctx.lineTo(0, -15);
+    ctx.lineTo(3, -19);
+    ctx.lineTo(6, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(-6, -9, 12, 2.5);
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(4, -2, 2, 0, Math.PI * 2);
@@ -1016,6 +1108,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
     overlayResult.hidden = mode !== "result";
   }
 
+  let pauseStartedAt = 0;
+
   function startRun() {
     gameState = "playing";
     resetRun();
@@ -1027,6 +1121,24 @@ document.getElementById("year").textContent = new Date().getFullYear();
     });
     nameInput.value = "";
     submitBtn.disabled = false;
+    pauseBtn.hidden = false;
+    loop();
+  }
+
+  function pauseGame() {
+    if (gameState !== "playing") return;
+    gameState = "paused";
+    cancelAnimationFrame(rafId);
+    pauseStartedAt = performance.now();
+    pauseBadge.hidden = false;
+  }
+
+  function resumeGame() {
+    if (gameState !== "paused") return;
+    const pausedMs = performance.now() - pauseStartedAt;
+    startTime += pausedMs; // so the elapsed-time clock doesn't count the pause
+    gameState = "playing";
+    pauseBadge.hidden = true;
     loop();
   }
 
@@ -1034,6 +1146,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     if (gameState !== "playing") return;
     gameState = "result";
     cancelAnimationFrame(rafId);
+    pauseBtn.hidden = true;
 
     const elapsedSec = (performance.now() - startTime) / 1000;
     let score = liveScore();
@@ -1108,12 +1221,1180 @@ document.getElementById("year").textContent = new Date().getFullYear();
 
   startBtn.addEventListener("click", startRun);
   retryBtn.addEventListener("click", startRun);
+  pauseBtn.addEventListener("click", pauseGame);
+  resumeBtn.addEventListener("click", resumeGame);
   submitBtn.addEventListener("click", submitScore);
   nameInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter") submitScore();
   });
 
   resetRun();
+  render();
+  showOverlay("start");
+})();
+
+/* ---------------------------------------------------------------------
+   Glizzy Maze — a small Pac-Man-style chase game. Grid-based movement,
+   canvas-rendered, four chasers with distinct AI personalities. Shares
+   the same leaderboard/season pattern as the other games, on its own
+   Firebase node ("mazeScores").
+--------------------------------------------------------------------- */
+(function glizzyMaze() {
+  const canvas = document.getElementById("mzCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.getElementById("mzScore");
+  const bestEl = document.getElementById("mzBest");
+  const overlay = document.getElementById("mzOverlay");
+  const overlayStart = document.getElementById("mzOverlayStart");
+  const overlayResult = document.getElementById("mzOverlayResult");
+  const startBtn = document.getElementById("mzStart");
+  const retryBtn = document.getElementById("mzRetry");
+  const pauseBtn = document.getElementById("mzPause");
+  const resumeBtn = document.getElementById("mzResume");
+  const pauseBadge = document.getElementById("mzPauseBadge");
+  const messageEl = document.getElementById("mzMessage");
+  const submitBox = document.getElementById("mzSubmitBox");
+  const nameInput = document.getElementById("mzNameInput");
+  const submitBtn = document.getElementById("mzSubmitBtn");
+  const leaderboardList = document.getElementById("mzLeaderboardList");
+  const seasonLabel = document.getElementById("mzSeasonLabel");
+  const upBtn = document.getElementById("mzUp");
+  const downBtn = document.getElementById("mzDown");
+  const leftBtn = document.getElementById("mzLeft");
+  const rightBtn = document.getElementById("mzRight");
+
+  /* ---- Maze data ---------------------------------------------------------
+     Modeled loosely on the real backyard: pool + shed together, a deck
+     connecting to the house, the garage and driveway off to one side, a
+     few trees scattered around the yard. Tile codes:
+       0 = generic/border wall     1 = open yard (path)
+       2 = pool (wall)             3 = shed (wall)
+       4 = garage (wall)           5 = house (wall)
+       6 = deck (path, tinted)     7 = driveway (path, tinted)
+       8 = tree (wall, drawn round)
+  --------------------------------------------------------------------- */
+  const COLS = 17, ROWS = 21, TILE = 26;
+  const TUNNEL_ROW = 6;
+  const PASSABLE = { 1: true, 6: true, 7: true, 9: true };
+
+  const maze = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) row.push(1);
+    maze.push(row);
+  }
+  function fillBlock(r0, r1, c0, c1, code) {
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) maze[r][c] = code;
+    }
+  }
+  for (let c = 0; c < COLS; c++) { maze[0][c] = 0; maze[ROWS - 1][c] = 0; }
+  for (let r = 0; r < ROWS; r++) { maze[r][0] = 0; maze[r][COLS - 1] = 0; }
+  maze[TUNNEL_ROW][0] = 1;
+  maze[TUNNEL_ROW][COLS - 1] = 1;
+
+  fillBlock(2, 3, 1, 2, 8);      // tree, top-left
+  fillBlock(3, 4, 7, 8, 8);      // tree, top-center
+  fillBlock(4, 5, 13, 14, 8);    // tree, top-right
+  fillBlock(12, 14, 1, 2, 8);    // tree, left side
+  fillBlock(8, 14, 5, 10, 9);    // concrete patio (base rect, carved by the pool below)
+  fillBlock(9, 14, 6, 9, 2);     // pool
+  fillBlock(11, 13, 10, 11, 3);  // shed, right of pool
+  fillBlock(14, 17, 10, 13, 4);  // garage
+  fillBlock(17, 19, 2, 8, 5);    // house — narrowed by 1 col on the right, opens a passage to the garage
+  fillBlock(15, 16, 6, 9, 6);    // wooden deck — now adjacent to the house
+  fillBlock(18, 19, 10, 15, 7);  // driveway — walkable, beside the garage
+
+  const GLITCH_TILES = [[12, 6], [12, 9]]; // Glitch's cut-through the pool
+  const PLAYER_START = { col: 14, row: 18 };
+  const DEN_CENTER = { col: 8, row: 11 };
+  const CHASER_DEFS = [
+    { id: "buschman", spawn: { col: 8, row: 8 }, label: "Buschman", color: "#4a7fb5", accent: "#c9c9c9" },
+    { id: "shroom", spawn: { col: 5, row: 9 }, label: "Spore Loser", color: "#7a3ab5", accent: "#c9382a" },
+    { id: "stable", spawn: { col: 10, row: 9 }, label: "Stable Hand", color: "#8b5a3c", accent: "#e3b876" },
+    { id: "glitch", spawn: { col: 8, row: 15 }, label: "The Glitch", color: "#3fafc0", accent: "#1b2740" }
+  ];
+  const POWER_TILES = [
+    { col: 1, row: 1 }, { col: 15, row: 1 }, { col: 15, row: 19 }, { col: 1, row: 15 }
+  ];
+  const BONUS_SPAWN_TILE = { col: 7, row: 8 };
+
+  const DIRS = [
+    { dx: 0, dy: -1 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 },
+    { dx: 1, dy: 0 }
+  ];
+
+  function wrapCol(c) {
+    if (c < 0) return COLS - 1;
+    if (c >= COLS) return 0;
+    return c;
+  }
+  function isOpen(col, row, moverId) {
+    const c = wrapCol(col);
+    if (row < 0 || row >= ROWS) return false;
+    if (moverId === "glitch" && GLITCH_TILES.some(function (t) { return t[0] === row && t[1] === c; })) return true;
+    return !!PASSABLE[maze[row][c]];
+  }
+  function isSpecialTile(col, row) {
+    return (col === PLAYER_START.col && row === PLAYER_START.row) ||
+      (col === BONUS_SPAWN_TILE.col && row === BONUS_SPAWN_TILE.row) ||
+      CHASER_DEFS.some(function (d) { return d.spawn.col === col && d.spawn.row === row; }) ||
+      POWER_TILES.some(function (t) { return t.col === col && t.row === row; });
+  }
+
+  /* ---- Game constants ---------------------------------------------------- */
+  const BOARD_SIZE = 5;
+  const PLAYER_SPEED = 1.6;
+  const CHASER_SPEED = 1.4;
+  const FRIGHTENED_SPEED = 0.9;
+  const BURST_SPEED = 1.75;
+  const FRIGHTENED_MS = 7000;
+  const EATEN_RESPAWN_MS = 3000;
+  const RAGE_QUIT_MS = 4000;
+  const GRACE_MS = 2200; // chasers just wander for this long at the start of each run
+  const SOBER_INTERVAL_MIN = 6000, SOBER_INTERVAL_MAX = 9000, SOBER_DURATION = 2500;
+  const BONUS_INTERVAL_MS = 13000, BONUS_LIFETIME_MS = 7000;
+  const PELLET_SCORE = 10;
+  const POWER_PELLET_SCORE = 50;
+  const EAT_CHASER_SCORES = [200, 400, 800, 1600];
+  const CLEAR_BONUS = 1000;
+  const BONUS_ITEMS = [
+    { type: "watermelon", score: 100 },
+    { type: "popsicle", score: 150 }
+  ];
+  const HORSE_FIRST_MIN = 3000, HORSE_FIRST_JITTER = 3000; // first appearance: quick, so nobody misses it
+  const HORSE_INTERVAL_MIN = 14000, HORSE_INTERVAL_JITTER = 10000; // subsequent appearances
+  const HORSE_SPEED = 1.5; // px/frame — a straight walk, tunnel entrance to tunnel entrance
+
+  /* ---- State -------------------------------------------------------------- */
+  let pellets = [];
+  let powerPellets = [];
+  let totalPellets = 0;
+  let player = {};
+  let chasers = [];
+  let score = 0;
+  let gameState = "idle"; // idle | playing | result
+  let frightenedUntil = 0;
+  let chaserEatStreak = 0;
+  let bonusItem = null; // { col, row, type, score, expiresAt }
+  let horse = null; // { col, row, x, y, dir, wanderUntil } -- a wandering NPC, not a static bonus tile
+  let nextHorseAt = 0;
+  let nextBonusAt = 0;
+  let rafId = null;
+  let fallbackBest = 0;
+  let runStartTime = 0;
+
+  function getBest() {
+    try { return parseInt(localStorage.getItem("glizzyMazeBest") || "0", 10); }
+    catch (e) { return fallbackBest; }
+  }
+  function setBest(v) {
+    try { localStorage.setItem("glizzyMazeBest", String(v)); }
+    catch (e) { fallbackBest = v; }
+  }
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  bestEl.textContent = getBest();
+
+  /* ---- Shared leaderboard --------------------------------------------- */
+  const leaderboardConfigured = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG.apiKey);
+  let scoresRef = null;
+  let allEntries = [];
+  let seasonStart = 0;
+  let currentTop = [];
+
+  function renderLeaderboard(entries) {
+    if (!leaderboardList) return;
+    if (!entries.length) {
+      leaderboardList.innerHTML = '<li class="leaderboard-empty">No runs yet — be the first.</li>';
+      return;
+    }
+    leaderboardList.innerHTML = entries
+      .map(function (e, i) {
+        const name = escapeHTML(String(e.name || "Anonymous Glizzy Fan").slice(0, 24));
+        return (
+          '<li class="' + (i === 0 ? "rank-1" : "") + '">' +
+          '<span class="lb-rank">' + (i + 1) + "</span>" +
+          '<span class="lb-name">' + name + "</span>" +
+          '<span class="lb-score">' + e.score + "</span>" +
+          "</li>"
+        );
+      })
+      .join("");
+  }
+  function updateSeasonLabel() {
+    if (!seasonLabel) return;
+    seasonLabel.textContent = seasonStart ? "Season since " + new Date(seasonStart).toLocaleDateString() : "All-time board";
+  }
+  function computeTop() {
+    const eligible = seasonStart ? allEntries.filter(function (e) { return e.ts >= seasonStart; }) : allEntries;
+    currentTop = eligible
+      .sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return b.ts - a.ts;
+      })
+      .slice(0, BOARD_SIZE);
+    updateSeasonLabel();
+    renderLeaderboard(currentTop);
+  }
+  if (!leaderboardConfigured) {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-empty">Leaderboard not set up yet.</li>';
+  } else if (typeof firebase === "undefined") {
+    if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard couldn\'t load.</li>';
+  } else {
+    try {
+      const app = firebase.apps && firebase.apps.length ? firebase.apps[0] : firebase.initializeApp(FIREBASE_CONFIG);
+      scoresRef = firebase.database(app).ref("mazeScores");
+      scoresRef.on(
+        "value",
+        function (snapshot) {
+          const val = snapshot.val() || {};
+          allEntries = Object.keys(val).map(function (key) {
+            return { key: key, name: val[key].name, score: val[key].score, ts: val[key].ts || 0 };
+          });
+          computeTop();
+        },
+        function () {
+          if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+        }
+      );
+      firebase.database(app).ref("season/startedAt").on("value", function (snapshot) {
+        seasonStart = snapshot.val() || 0;
+        computeTop();
+      });
+    } catch (e) {
+      if (leaderboardList) leaderboardList.innerHTML = '<li class="leaderboard-error">Leaderboard unavailable right now.</li>';
+    }
+  }
+  function qualifiesForBoard(s) {
+    if (!scoresRef || s <= 0) return false;
+    if (currentTop.length < BOARD_SIZE) return true;
+    return s > currentTop[currentTop.length - 1].score;
+  }
+  function submitScore(pendingScore) {
+    if (!scoresRef) return;
+    const name = (nameInput.value || "").trim().slice(0, 24) || "Anonymous Glizzy Fan";
+    submitBtn.disabled = true;
+    scoresRef
+      .push({ name: name, score: pendingScore, ts: Date.now() })
+      .catch(function () {})
+      .then(function () {
+        submitBox.classList.add("submitted");
+        const note = document.createElement("p");
+        note.className = "score-submit-note";
+        note.textContent = "Added! The crew will remember this.";
+        submitBox.appendChild(note);
+      });
+  }
+  let pendingScore = 0;
+
+  /* ---- Setup / reset ------------------------------------------------------ */
+  function buildPellets() {
+    pellets = [];
+    powerPellets = [];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (!PASSABLE[maze[r][c]]) continue;
+        if (isSpecialTile(c, r)) continue;
+        pellets.push({ col: c, row: r });
+      }
+    }
+    POWER_TILES.forEach(function (t) { powerPellets.push({ col: t.col, row: t.row }); });
+    totalPellets = pellets.length;
+  }
+
+  function cellCenter(col, row) {
+    return { x: wrapCol(col) * TILE + TILE / 2, y: row * TILE + TILE / 2 };
+  }
+
+  function resetPositions() {
+    const pc = cellCenter(PLAYER_START.col, PLAYER_START.row);
+    player = { col: PLAYER_START.col, row: PLAYER_START.row, x: pc.x, y: pc.y, dir: { dx: 0, dy: 0 }, nextDir: { dx: 0, dy: 0 }, mouth: 0 };
+
+    chasers = CHASER_DEFS.map(function (def) {
+      const c = cellCenter(def.spawn.col, def.spawn.row);
+      return {
+        id: def.id, label: def.label, color: def.color, accent: def.accent,
+        col: def.spawn.col, row: def.spawn.row, x: c.x, y: c.y,
+        spawnCol: def.spawn.col, spawnRow: def.spawn.row,
+        dir: { dx: 0, dy: 1 },
+        mode: "normal", // normal | frightened | eaten
+        soberUntil: 0, nextSoberAt: performance.now() + SOBER_INTERVAL_MIN + Math.random() * (SOBER_INTERVAL_MAX - SOBER_INTERVAL_MIN),
+        rageUntil: 0, closeStreak: 0, wasClose: false,
+        eatenUntil: 0, trail: []
+      };
+    });
+
+    frightenedUntil = 0;
+    chaserEatStreak = 0;
+    bonusItem = null;
+    nextBonusAt = performance.now() + BONUS_INTERVAL_MS;
+    horse = null;
+    nextHorseAt = performance.now() + HORSE_FIRST_MIN + Math.random() * HORSE_FIRST_JITTER;
+  }
+
+  /* ---- Movement ------------------------------------------------------------ */
+  function stepEntity(e, speed, chooseDirFn) {
+    if (e.dir.dx === 0 && e.dir.dy === 0) {
+      e.dir = chooseDirFn(e);
+      if (e.dir.dx === 0 && e.dir.dy === 0) return; // truly stuck (shouldn't happen)
+    }
+    const rawCol = e.col + e.dir.dx;
+    const rawRow = e.row + e.dir.dy;
+
+    // Tunnel wrap: the target column is off the grid entirely. Teleport
+    // straight to the far side instead of interpolating pixel-by-pixel
+    // across the whole map (which is what caused the "slides all the way
+    // across" bug — cellCenter() wraps the column for the target, but the
+    // entity's actual on-screen position was still on the near edge).
+    if (rawCol < 0 || rawCol >= COLS) {
+      const wrapped = wrapCol(rawCol);
+      const c = cellCenter(wrapped, rawRow);
+      e.col = wrapped;
+      e.row = rawRow;
+      e.x = c.x;
+      e.y = c.y;
+      e.dir = chooseDirFn(e);
+      return;
+    }
+
+    const target = cellCenter(rawCol, rawRow);
+    const dx = target.x - e.x, dy = target.y - e.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= speed) {
+      e.col = rawCol;
+      e.row = rawRow;
+      e.x = target.x; e.y = target.y;
+      e.dir = chooseDirFn(e);
+    } else {
+      e.x += (dx / dist) * speed;
+      e.y += (dy / dist) * speed;
+    }
+  }
+
+  function playerChooseDir(e) {
+    if (isOpen(e.col + e.nextDir.dx, e.row + e.nextDir.dy, "player") && (e.nextDir.dx || e.nextDir.dy)) {
+      return { dx: e.nextDir.dx, dy: e.nextDir.dy };
+    }
+    if (isOpen(e.col + e.dir.dx, e.row + e.dir.dy, "player")) return e.dir;
+    return { dx: 0, dy: 0 };
+  }
+
+  function validDirsFor(chaser) {
+    const nonReverse = DIRS.filter(function (d) {
+      const isReverse = d.dx === -chaser.dir.dx && d.dy === -chaser.dir.dy && (chaser.dir.dx || chaser.dir.dy);
+      if (isReverse) return false;
+      return isOpen(chaser.col + d.dx, chaser.row + d.dy, chaser.id);
+    });
+    if (nonReverse.length) return nonReverse;
+    return DIRS.filter(function (d) { return isOpen(chaser.col + d.dx, chaser.row + d.dy, chaser.id); });
+  }
+
+  function pickTowards(chaser, target, maximize) {
+    const candidates = validDirsFor(chaser);
+    if (!candidates.length) return { dx: 0, dy: 0 };
+    let best = candidates[0], bestDist = null;
+    candidates.forEach(function (d) {
+      const nc = chaser.col + d.dx, nr = chaser.row + d.dy;
+      const dist = (nc - target.col) * (nc - target.col) + (nr - target.row) * (nr - target.row);
+      if (bestDist === null || (maximize ? dist > bestDist : dist < bestDist)) {
+        bestDist = dist; best = d;
+      }
+    });
+    return best;
+  }
+  function pickRandom(chaser) {
+    const candidates = validDirsFor(chaser);
+    if (!candidates.length) return { dx: 0, dy: 0 };
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  function chaserChooseDir(chaser) {
+    const now = performance.now();
+
+    if (now - runStartTime < GRACE_MS) {
+      return pickRandom(chaser);
+    }
+    if (chaser.mode === "eaten") {
+      return pickTowards(chaser, DEN_CENTER, false);
+    }
+    // Stable Hand is drawn to the horse above all else -- even mid-fright he can't help it
+    if (chaser.id === "stable" && horse) {
+      return pickTowards(chaser, { col: horse.col, row: horse.row }, false);
+    }
+    if (chaser.mode === "frightened") {
+      return pickTowards(chaser, { col: player.col, row: player.row }, true);
+    }
+    if (chaser.rageUntil > now) {
+      return { dx: 0, dy: 0 };
+    }
+
+    if (chaser.id === "buschman") {
+      if (now < chaser.soberUntil) return pickTowards(chaser, { col: player.col, row: player.row }, false);
+      if (now >= chaser.nextSoberAt) {
+        chaser.soberUntil = now + SOBER_DURATION;
+        chaser.nextSoberAt = now + SOBER_DURATION + SOBER_INTERVAL_MIN + Math.random() * (SOBER_INTERVAL_MAX - SOBER_INTERVAL_MIN);
+        return pickTowards(chaser, { col: player.col, row: player.row }, false);
+      }
+      return Math.random() < 0.25 ? pickTowards(chaser, { col: player.col, row: player.row }, false) : pickRandom(chaser);
+    }
+
+    if (chaser.id === "shroom") {
+      const dist = Math.hypot(chaser.col - player.col, chaser.row - player.row);
+      const wasClose = chaser.wasClose;
+      chaser.wasClose = dist < 3;
+      if (wasClose && dist > 6) {
+        chaser.closeStreak += 1;
+        if (chaser.closeStreak >= 3) {
+          chaser.rageUntil = now + RAGE_QUIT_MS;
+          chaser.closeStreak = 0;
+          return { dx: 0, dy: 0 };
+        }
+      }
+      return pickTowards(chaser, { col: player.col, row: player.row }, false);
+    }
+
+    if (chaser.id === "stable") {
+      // horse case is handled earlier, above the frightened check — by this
+      // point horse is guaranteed absent
+      if (Math.random() < 0.3) return pickRandom(chaser);
+      const ahead = { col: player.col + player.dir.dx * 3, row: player.row + player.dir.dy * 3 };
+      return pickTowards(chaser, ahead, false);
+    }
+
+    // glitch: erratic
+    return pickRandom(chaser);
+  }
+
+  function chaserSpeed(chaser) {
+    if (chaser.mode === "eaten") return CHASER_SPEED * 2.2;
+    if (chaser.id === "stable" && horse) return BURST_SPEED;
+    if (chaser.mode === "frightened") return FRIGHTENED_SPEED;
+    if (chaser.id === "buschman" && performance.now() < chaser.soberUntil) return BURST_SPEED;
+    if (chaser.id === "shroom") {
+      const dist = Math.hypot(chaser.col - player.col, chaser.row - player.row);
+      return dist < 4 ? BURST_SPEED : CHASER_SPEED;
+    }
+    if (chaser.id === "stable") return CHASER_SPEED * 0.9;
+    return CHASER_SPEED;
+  }
+
+  /* ---- Game loop ------------------------------------------------------------ */
+  function collectPellets() {
+    for (let i = pellets.length - 1; i >= 0; i--) {
+      if (pellets[i].col === player.col && pellets[i].row === player.row) {
+        pellets.splice(i, 1);
+        score += PELLET_SCORE;
+      }
+    }
+    for (let i = powerPellets.length - 1; i >= 0; i--) {
+      if (powerPellets[i].col === player.col && powerPellets[i].row === player.row) {
+        powerPellets.splice(i, 1);
+        score += POWER_PELLET_SCORE;
+        frightenedUntil = performance.now() + FRIGHTENED_MS;
+        chaserEatStreak = 0;
+        chasers.forEach(function (ch) {
+          if (ch.mode !== "eaten") ch.mode = "frightened";
+        });
+      }
+    }
+    if (bonusItem && bonusItem.col === player.col && bonusItem.row === player.row) {
+      score += bonusItem.score;
+      bonusItem = null;
+      nextBonusAt = performance.now() + BONUS_INTERVAL_MS;
+    }
+  }
+
+  function checkChaserCollisions() {
+    const now = performance.now();
+    if (now - runStartTime < GRACE_MS) return; // safe start — no collisions while chasers are just wandering
+    chasers.forEach(function (ch) {
+      if (ch.mode === "eaten") return;
+      const dist = Math.hypot(ch.x - player.x, ch.y - player.y);
+      if (dist > TILE * 0.6) return;
+      if (ch.mode === "frightened") {
+        ch.mode = "eaten";
+        ch.eatenUntil = now + EATEN_RESPAWN_MS;
+        const points = EAT_CHASER_SCORES[Math.min(chaserEatStreak, EAT_CHASER_SCORES.length - 1)];
+        score += points;
+        chaserEatStreak += 1;
+      } else {
+        endGame(false);
+      }
+    });
+  }
+
+  function updateBonus() {
+    const now = performance.now();
+    if (!bonusItem && now >= nextBonusAt) {
+      const pick = BONUS_ITEMS[Math.floor(Math.random() * BONUS_ITEMS.length)];
+      bonusItem = { col: BONUS_SPAWN_TILE.col, row: BONUS_SPAWN_TILE.row, type: pick.type, score: pick.score, expiresAt: now + BONUS_LIFETIME_MS };
+    } else if (bonusItem && now >= bonusItem.expiresAt) {
+      bonusItem = null;
+      nextBonusAt = now + BONUS_INTERVAL_MS;
+    }
+  }
+
+  function updateHorse() {
+    const now = performance.now();
+    if (!horse) {
+      if (now >= nextHorseAt) {
+        const fromLeft = Math.random() < 0.5;
+        horse = {
+          x: fromLeft ? -TILE : (COLS + 1) * TILE,
+          y: TUNNEL_ROW * TILE + TILE / 2,
+          dir: fromLeft ? 1 : -1,
+          col: fromLeft ? 0 : COLS - 1,
+          row: TUNNEL_ROW
+        };
+      }
+      return;
+    }
+    horse.x += horse.dir * HORSE_SPEED;
+    horse.col = Math.max(0, Math.min(COLS - 1, Math.round(horse.x / TILE)));
+    if (horse.x < -TILE * 1.5 || horse.x > (COLS + 1.5) * TILE) {
+      horse = null;
+      nextHorseAt = now + HORSE_INTERVAL_MIN + Math.random() * HORSE_INTERVAL_JITTER;
+    }
+  }
+
+  function updateChaserModes() {
+    const now = performance.now();
+    if (frightenedUntil && now >= frightenedUntil) {
+      frightenedUntil = 0;
+      chasers.forEach(function (ch) {
+        if (ch.mode === "frightened") ch.mode = "normal";
+      });
+    }
+    chasers.forEach(function (ch) {
+      if (ch.mode === "eaten" && now >= ch.eatenUntil) {
+        ch.mode = "normal";
+        const c = cellCenter(ch.spawnCol, ch.spawnRow);
+        ch.col = ch.spawnCol;
+        ch.row = ch.spawnRow;
+        ch.x = c.x;
+        ch.y = c.y;
+        ch.dir = { dx: 0, dy: 1 };
+      }
+    });
+  }
+
+  function tick() {
+    if (gameState !== "playing") return;
+    stepEntity(player, PLAYER_SPEED, playerChooseDir);
+    player.mouth += 0.25;
+
+    chasers.forEach(function (ch) {
+      if (ch.mode === "eaten" && performance.now() < ch.eatenUntil) return; // paused while "returning"
+      stepEntity(ch, chaserSpeed(ch), chaserChooseDir);
+      const now = performance.now();
+      if ((ch.id === "shroom" || ch.id === "glitch") && ch.mode === "normal") {
+        if (!ch.lastTrailPush || now - ch.lastTrailPush > 70) {
+          ch.trail.push({ x: ch.x, y: ch.y, t: now });
+          if (ch.trail.length > 16) ch.trail.shift();
+          ch.lastTrailPush = now;
+        }
+      } else if (ch.trail.length) {
+        ch.trail.shift(); // fade out naturally while frightened/eaten instead of snapping away
+      }
+    });
+
+    collectPellets();
+    updateBonus();
+    updateHorse();
+    updateChaserModes();
+    checkChaserCollisions();
+
+    if (gameState === "playing" && pellets.length === 0) {
+      score += CLEAR_BONUS;
+      endGame(true);
+      return;
+    }
+
+    if (gameState === "playing") {
+      render();
+      rafId = requestAnimationFrame(tick);
+    }
+  }
+
+  /* ---- Rendering ------------------------------------------------------------ */
+  const ZONE_COLORS = {
+    0: "#173021", // generic/border wall — dark hedge green
+    2: "#2f9fd6", // pool
+    3: "#b23a28", // shed
+    4: "#2b2b2b", // garage
+    5: "#15120f", // house
+    8: "#1f5c38"  // tree
+  };
+  const PATH_TINTS = {
+    1: "#173a24", // yard grass
+    6: "#5c4530", // deck
+    7: "#5a5a5a", // driveway
+    9: "#9a9a92"  // pool concrete patio
+  };
+
+  function drawMaze() {
+    ctx.fillStyle = PATH_TINTS[1];
+    ctx.fillRect(0, 0, COLS * TILE, ROWS * TILE);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const code = maze[r][c];
+        if (code === 1) continue; // already painted as base grass
+        if (PATH_TINTS[code]) {
+          ctx.fillStyle = PATH_TINTS[code];
+          ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+          continue;
+        }
+        if (code === 8) continue; // trees drawn as circles below, not blocks
+        ctx.fillStyle = ZONE_COLORS[code] || ZONE_COLORS[0];
+        ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+      }
+    }
+    // Trees rendered as overlapping circles so they read as foliage, not a block
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (maze[r][c] !== 8) continue;
+        ctx.fillStyle = ZONE_COLORS[8];
+        ctx.beginPath();
+        ctx.arc(c * TILE + TILE / 2, r * TILE + TILE / 2, TILE * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    GLITCH_TILES.forEach(function (t) {
+      ctx.fillStyle = "rgba(63,175,192,0.4)";
+      ctx.fillRect(t[1] * TILE, t[0] * TILE, TILE, TILE);
+    });
+  }
+
+  function drawHotDog(cx, cy, scale) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#e3b876";
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 7.5, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#b23a28";
+    ctx.beginPath();
+    ctx.ellipse(0, -1, 6.8, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#f2a63d";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-4.5, -1.5);
+    ctx.quadraticCurveTo(-2, -3, 0, -1.5);
+    ctx.quadraticCurveTo(2, -3, 4.5, -1.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPellets() {
+    pellets.forEach(function (p) {
+      drawHotDog(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, 0.85);
+    });
+    const pulse = 1 + Math.sin(performance.now() / 150) * 0.12;
+    powerPellets.forEach(function (p) {
+      drawHotDog(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, 1.7 * pulse);
+    });
+  }
+
+  function drawBonus() {
+    if (!bonusItem) return;
+    const x = bonusItem.col * TILE + TILE / 2, y = bonusItem.row * TILE + TILE / 2;
+    ctx.save();
+    ctx.translate(x, y);
+    if (bonusItem.type === "watermelon") {
+      ctx.fillStyle = "#5a9c4a";
+      ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#d9576b";
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = "#e3574c";
+      ctx.fillRect(-4, -8, 8, 12);
+      ctx.strokeStyle = "#e3b876";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 4); ctx.lineTo(0, 10); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawHorse() {
+    if (!horse) return;
+    ctx.save();
+    ctx.translate(horse.x, horse.y);
+    if (horse.dir < 0) ctx.scale(-1, 1);
+
+    const legPhase = Math.sin(performance.now() / 85) * 3;
+    const BODY = "#8a5a35";
+    const DARK = "#2a1c12";
+    const HOOF = "#0d0906";
+
+    // Legs (back pair and front pair swing opposite each other for a walking gait)
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-14 + legPhase, 4, 5, 10);
+    ctx.fillRect(-6 - legPhase, 4, 5, 10);
+    ctx.fillRect(5 - legPhase, 4, 5, 10);
+    ctx.fillRect(13 + legPhase, 4, 5, 10);
+    ctx.fillStyle = HOOF;
+    ctx.fillRect(-14 + legPhase, 12, 5, 3);
+    ctx.fillRect(-6 - legPhase, 12, 5, 3);
+    ctx.fillRect(5 - legPhase, 12, 5, 3);
+    ctx.fillRect(13 + legPhase, 12, 5, 3);
+
+    // Tail
+    ctx.fillStyle = DARK;
+    ctx.fillRect(-23, -3, 6, 6);
+    ctx.fillRect(-26, 1, 5, 9);
+
+    // Body
+    ctx.fillStyle = BODY;
+    ctx.fillRect(-18, -8, 30, 14);
+
+    // Neck + head + snout
+    ctx.fillRect(7, -19, 10, 15);
+    ctx.fillRect(13, -25, 12, 11);
+    ctx.fillRect(23, -20, 8, 7);
+
+    // Mane (dark stripe along the back of the neck, head, and spine)
+    ctx.fillStyle = DARK;
+    ctx.fillRect(7, -19, 4, 15);
+    ctx.fillRect(11, -25, 4, 9);
+    ctx.fillRect(-18, -8, 25, 3);
+
+    // Ears
+    ctx.fillStyle = BODY;
+    ctx.beginPath();
+    ctx.moveTo(15, -25); ctx.lineTo(17, -30); ctx.lineTo(19, -25); ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(20, -25); ctx.lineTo(22, -30); ctx.lineTo(24, -25); ctx.closePath();
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = "#1b2740";
+    ctx.fillRect(27, -18, 2.5, 2.5);
+
+    ctx.restore();
+  }
+
+  function drawPlayer() {
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.scale(1.45, 1.45); // match the chasers' scale
+    const moving = player.dir.dx !== 0 || player.dir.dy !== 0;
+    const swing = moving ? Math.sin(player.mouth * 3) * 5 : 0;
+    // Legs
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-4, 7); ctx.lineTo(-4 + swing, 13);
+    ctx.moveTo(4, 7); ctx.lineTo(4 - swing, 13);
+    ctx.stroke();
+    // Bun
+    ctx.fillStyle = "#e3b876";
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 9, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    // Sausage
+    ctx.fillStyle = "#b23a28";
+    ctx.beginPath();
+    ctx.ellipse(0, -3, 8, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Pope hat (mitre)
+    ctx.fillStyle = "#fbf5e8";
+    ctx.beginPath();
+    ctx.moveTo(-5.5, -7);
+    ctx.lineTo(-2.7, -17);
+    ctx.lineTo(0, -13.5);
+    ctx.lineTo(2.7, -17);
+    ctx.lineTo(5.5, -7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "#1b2740";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#c9a227";
+    ctx.fillRect(-5.5, -8, 11, 2.2);
+    // Eyes
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(3, -3, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1b2740";
+    ctx.beginPath(); ctx.arc(3.6, -3, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawHumanoidBase(bodyColor, skinColor, legPhase) {
+    // Legs (walking stance)
+    ctx.fillStyle = "#1b2740";
+    const legSwing = Math.sin(legPhase) * 2;
+    ctx.fillRect(-5 + legSwing, 6, 4, 7);
+    ctx.fillRect(1 - legSwing, 6, 4, 7);
+    // Torso
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-7, -4, 14, 11);
+    // Arms
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-9, -2, 3, 7);
+    ctx.fillRect(6, -2, 3, 7);
+    // Head
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-6, -14, 12, 10);
+  }
+
+  function drawHair(color, height) {
+    ctx.fillStyle = color;
+    ctx.fillRect(-6.5, -15, 13, height || 4);
+  }
+
+  function drawEyes(offsetY, wide) {
+    ctx.fillStyle = "#1b2740";
+    const w = wide ? 2.2 : 1.6;
+    ctx.fillRect(-4, offsetY, w, w + 1);
+    ctx.fillRect(2, offsetY, w, w + 1);
+  }
+
+  function drawHeart(cx, cy, size) {
+    ctx.fillStyle = "#e3574c";
+    ctx.beginPath();
+    ctx.arc(cx - size * 0.5, cy, size * 0.5, 0, Math.PI * 2);
+    ctx.arc(cx + size * 0.5, cy, size * 0.5, 0, Math.PI * 2);
+    ctx.moveTo(cx - size, cy + size * 0.15);
+    ctx.lineTo(cx, cy + size * 1.15);
+    ctx.lineTo(cx + size, cy + size * 0.15);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawHeartEyes(offsetY) {
+    drawHeart(-3.6, offsetY + 0.8, 3.3);
+    drawHeart(3.6, offsetY + 0.8, 3.3);
+  }
+
+  function drawChaser(ch) {
+    const now = performance.now();
+    ctx.save();
+    ctx.translate(ch.x, ch.y);
+
+    if (ch.mode === "eaten") {
+      ctx.fillStyle = "#fbf5e8";
+      ctx.beginPath(); ctx.arc(-3, 0, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, 0, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    if (ch.trail && ch.trail.length) {
+      ch.trail.forEach(function (pt, i) {
+        const age = (i + 1) / ch.trail.length; // 0 excluded = oldest still gets a little visibility, 1 = newest
+        const relX = pt.x - ch.x, relY = pt.y - ch.y;
+        if (ch.id === "shroom") {
+          const hue = (pt.t / 12) % 360;
+          ctx.fillStyle = "hsla(" + hue + ", 90%, 60%, " + (age * 0.7) + ")";
+          ctx.beginPath();
+          ctx.arc(relX, relY, 6 * age, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (ch.id === "glitch") {
+          ctx.fillStyle = "rgba(225,230,240," + (age * 0.55) + ")";
+          ctx.beginPath();
+          ctx.arc(relX, relY, 7.5 * age, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+
+    ctx.scale(1.45, 1.45); // bigger overall — small details need the room
+    const legPhase = ch.col * 3 + ch.row * 3 + now / 120;
+    const skin = "#e3b876";
+
+    if (ch.mode === "frightened") {
+      const flash = now - frightenedUntil > -1500 && Math.floor(now / 150) % 2 === 0;
+      drawHumanoidBase(flash ? "#3a4a7a" : "#1b2740", flash ? "#5c6a9a" : "#2b3a5a", legPhase);
+      if (ch.id === "stable" && horse) {
+        drawHeartEyes(-8.5);
+      } else {
+        ctx.fillStyle = "#fbf5e8";
+        ctx.fillRect(-4, -9, 2, 2);
+        ctx.fillRect(2, -9, 2, 2);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // Slight flicker for Glitch — reads as "not quite stable" without being distracting
+    if (ch.id === "glitch" && Math.random() < 0.12) {
+      ctx.globalAlpha = 0.55;
+    }
+
+    drawHumanoidBase(ch.color, skin, legPhase);
+
+    if (ch.id === "buschman") {
+      drawHair("#6b4429", 3);
+      const soberFlash = now < ch.soberUntil;
+      drawEyes(-10, soberFlash);
+      if (soberFlash) {
+        ctx.strokeStyle = "#f2a63d";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-7, -15, 14, 12);
+      }
+      // Cap
+      ctx.fillStyle = "#1b2740";
+      ctx.beginPath();
+      ctx.arc(0, -15, 6.3, Math.PI, 0, false);
+      ctx.fill();
+      ctx.fillRect(3, -16, 6, 2.5); // brim
+      ctx.fillStyle = "#c9a227";
+      ctx.beginPath(); ctx.arc(0, -18, 1.1, 0, Math.PI * 2); ctx.fill();
+      // Beer can in hand
+      ctx.fillStyle = "#c9c9c9";
+      ctx.fillRect(7, 3, 4, 7);
+      ctx.fillStyle = "#4a7fb5";
+      ctx.fillRect(7, 4, 4, 2);
+    } else if (ch.id === "shroom") {
+      drawEyes(-10, false);
+      // Big mushroom cap — the whole point is that it can't be missed
+      ctx.fillStyle = ch.accent;
+      ctx.beginPath();
+      ctx.ellipse(0, -13.5, 14, 9.5, 0, Math.PI, 0, false);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#1b2740";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.fillStyle = "#fbf5e8";
+      ctx.beginPath(); ctx.arc(-7, -15.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(1, -18.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(7, -14.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#e3b876";
+      ctx.fillRect(-3.5, -13, 7, 3);
+    } else if (ch.id === "stable") {
+      // Dark hair peeking from under the hard hat
+      drawHair("#241f18", 4);
+      if (horse) drawHeartEyes(-11);
+      else drawEyes(-10, false);
+      // Hard hat
+      ctx.fillStyle = ch.accent;
+      ctx.beginPath();
+      ctx.arc(0, -14, 6.5, Math.PI, 0, false);
+      ctx.fill();
+      // Hammer in hand
+      ctx.fillStyle = "#8b5a3c";
+      ctx.fillRect(8.5, 1, 2, 8);
+      ctx.fillStyle = "#5a5a5a";
+      ctx.fillRect(6, -1, 7, 3.5);
+      ctx.fillStyle = "#3a3a3a";
+      ctx.fillRect(6, -1, 2, 3.5);
+    } else {
+      // Glitch — brown hair and glasses
+      drawHair("#5a4230", 5);
+      drawEyes(-10, false);
+      ctx.strokeStyle = "#1b2740";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-5.2, -11, 3.2, 3);
+      ctx.strokeRect(2, -11, 3.2, 3);
+      ctx.beginPath();
+      ctx.moveTo(-2, -9.5);
+      ctx.lineTo(2, -9.5);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function render() {
+    drawMaze();
+    drawPellets();
+    drawBonus();
+    drawHorse();
+    chasers.forEach(drawChaser);
+    drawPlayer();
+    scoreEl.textContent = String(score);
+  }
+
+  /* ---- State machine --------------------------------------------------------- */
+  function showOverlay(mode) {
+    overlay.hidden = false;
+    overlayStart.hidden = mode !== "start";
+    overlayResult.hidden = mode !== "result";
+  }
+
+  let pauseStartedAt = 0;
+
+  function shiftAllTimers(delta) {
+    // Every timed state in the maze uses absolute performance.now() deadlines
+    // — pausing means real wall-clock time passes with no gameplay, so every
+    // deadline needs to shift forward by exactly how long the pause lasted,
+    // or things like fright mode / grace period / respawns would silently
+    // lose time (or expire instantly) the moment you resume.
+    runStartTime += delta;
+    if (frightenedUntil) frightenedUntil += delta;
+    nextBonusAt += delta;
+    if (bonusItem) bonusItem.expiresAt += delta;
+    nextHorseAt += delta;
+    chasers.forEach(function (ch) {
+      if (ch.soberUntil) ch.soberUntil += delta;
+      ch.nextSoberAt += delta;
+      if (ch.rageUntil) ch.rageUntil += delta;
+      if (ch.eatenUntil) ch.eatenUntil += delta;
+    });
+  }
+
+  function startRun() {
+    gameState = "playing";
+    score = 0;
+    buildPellets();
+    resetPositions();
+    runStartTime = performance.now();
+    overlay.hidden = true;
+    submitBox.hidden = true;
+    submitBox.classList.remove("submitted");
+    submitBox.querySelectorAll(".score-submit-note").forEach(function (n) { n.remove(); });
+    nameInput.value = "";
+    submitBtn.disabled = false;
+    pauseBtn.hidden = false;
+    render();
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function pauseGame() {
+    if (gameState !== "playing") return;
+    gameState = "paused";
+    cancelAnimationFrame(rafId);
+    pauseStartedAt = performance.now();
+    pauseBadge.hidden = false;
+  }
+
+  function resumeGame() {
+    if (gameState !== "paused") return;
+    const pausedMs = performance.now() - pauseStartedAt;
+    shiftAllTimers(pausedMs);
+    gameState = "playing";
+    pauseBadge.hidden = true;
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function endGame(cleared) {
+    if (gameState !== "playing") return;
+    gameState = "result";
+    cancelAnimationFrame(rafId);
+    pauseBtn.hidden = true;
+
+    pendingScore = score;
+    const best = Math.max(getBest(), score);
+    setBest(best);
+    bestEl.textContent = best;
+
+    messageEl.textContent = (cleared ? "Cleared the whole yard! " : "Caught. ") + score + " pts.";
+    showOverlay("result");
+    submitBox.hidden = !qualifiesForBoard(score);
+  }
+
+  /* ---- Input ------------------------------------------------------------------ */
+  function setDir(dx, dy) {
+    if (gameState !== "playing") return;
+    player.nextDir = { dx: dx, dy: dy };
+  }
+  function bindTap(el, dx, dy) {
+    el.addEventListener("pointerdown", function (e) {
+      if (e.isTrusted === false) return;
+      e.preventDefault();
+      setDir(dx, dy);
+    });
+  }
+  bindTap(upBtn, 0, -1);
+  bindTap(downBtn, 0, 1);
+  bindTap(leftBtn, -1, 0);
+  bindTap(rightBtn, 1, 0);
+
+  // Swipe controls on the canvas itself — easier than the d-pad buttons on
+  // mobile, especially for quick direction changes mid-chase.
+  (function setupSwipe() {
+    const SWIPE_MIN_PX = 18; // ignore tiny accidental touches
+    let touchStartX = 0, touchStartY = 0, tracking = false;
+
+    canvas.addEventListener(
+      "touchstart",
+      function (e) {
+        if (e.isTrusted === false || e.touches.length !== 1) return;
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        tracking = true;
+      },
+      { passive: true }
+    );
+
+    canvas.addEventListener(
+      "touchmove",
+      function (e) {
+        // Block the page from scrolling/bouncing while swiping on the game —
+        // touch-action:none on the canvas covers most browsers, this is the
+        // explicit backup so a fast swipe can never drag the page instead.
+        if (tracking) e.preventDefault();
+      },
+      { passive: false }
+    );
+
+    canvas.addEventListener("touchend", function (e) {
+      if (e.isTrusted === false || !tracking) return;
+      tracking = false;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - touchStartX;
+      const dy = touch.clientY - touchStartY;
+      const absDx = Math.abs(dx), absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < SWIPE_MIN_PX) return; // too small — treat as a tap, not a swipe
+      if (absDx > absDy) setDir(dx > 0 ? 1 : -1, 0);
+      else setDir(0, dy > 0 ? 1 : -1);
+    });
+
+    canvas.addEventListener("touchcancel", function () {
+      tracking = false;
+    });
+  })();
+
+  // Backup for the CSS touch-action:none above — belt and suspenders so a
+  // stray drag anywhere in the game area (including the gaps between the
+  // d-pad buttons) can never grab the page and scroll it while playing.
+  (function lockDownScrolling() {
+    const stageEl = document.querySelector(".maze-stage");
+    if (!stageEl) return;
+    stageEl.addEventListener(
+      "touchmove",
+      function (e) {
+        if (gameState === "playing" || gameState === "paused") e.preventDefault();
+      },
+      { passive: false }
+    );
+  })();
+
+  window.addEventListener("keydown", function (e) {
+    if (gameState !== "playing" || e.isTrusted === false) return;
+    if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") { setDir(0, -1); e.preventDefault(); }
+    if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") { setDir(0, 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") { setDir(-1, 0); e.preventDefault(); }
+    if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") { setDir(1, 0); e.preventDefault(); }
+  });
+
+  startBtn.addEventListener("click", startRun);
+  retryBtn.addEventListener("click", startRun);
+  pauseBtn.addEventListener("click", pauseGame);
+  resumeBtn.addEventListener("click", resumeGame);
+  submitBtn.addEventListener("click", function () { submitScore(pendingScore); });
+  nameInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") submitScore(pendingScore);
+  });
+    buildPellets();
+  resetPositions();
   render();
   showOverlay("start");
 })();

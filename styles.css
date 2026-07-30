@@ -370,6 +370,9 @@ button { font: inherit; }
   max-width: 340px;
   margin: var(--space-3) auto 0;
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .game-hud {
   display: flex;
@@ -468,7 +471,12 @@ button { font: inherit; }
 }
 
 /* ---- Perfect Pour ------------------------------------------------- */
-.pour-stage { touch-action: manipulation; }
+.pour-stage {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 .pour-hud {
   display: flex;
   justify-content: center;
@@ -482,7 +490,27 @@ button { font: inherit; }
 }
 .pour-hud b { color: var(--trim-white) !important; font-size: 1rem; }
 
-.pour-glass-wrap { width: 140px; margin: 0 auto var(--space-3); }
+.pour-glass-wrap { position: relative; width: 140px; margin: 0 auto var(--space-3); }
+.pour-round-flash {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1.5rem;
+  color: var(--sunset-gold) !important;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.pour-round-flash.show {
+  opacity: 1;
+  transform: translate(-50%, -60%) scale(1);
+}
 .pour-glass {
   position: relative;
   display: block;
@@ -666,7 +694,64 @@ button { font: inherit; }
 }
 .album-card.future .eyebrow { margin-bottom: 0.5em; }
 
-/* ---- Visit -------------------------------------------------------- */
+/* ---- Arcade -------------------------------------------------------- */
+.arcade {
+  background: var(--dusk-navy) !important;
+  color: var(--trim-white) !important;
+  padding: var(--space-5) 0;
+  scroll-margin-top: 68px;
+}
+.arcade .section-head { text-align: center; max-width: 60ch; margin: 0 auto var(--space-4); }
+.arcade .section-head p { color: rgba(251,245,232,0.85) !important; }
+.arcade h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); margin: 0.3em 0; color: var(--trim-white) !important; }
+
+.arcade-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.7em;
+  margin-bottom: var(--space-3);
+}
+.arcade-tab {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.75em 1.2em;
+  border-radius: 999px;
+  border: 2px solid var(--sunset-gold);
+  background: transparent !important;
+  color: var(--trim-white) !important;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+}
+.arcade-tab:hover { transform: translateY(-2px); }
+.arcade-tab.active {
+  background: var(--sunset-gold) !important;
+  color: var(--ink) !important;
+  border-color: var(--sunset-gold);
+}
+
+.arcade-frame {
+  max-width: 640px;
+  margin: 0 auto;
+  border: 6px solid var(--brass);
+  border-radius: 12px;
+  padding: 4px;
+  background: var(--dusk-navy);
+  box-shadow: 0 30px 60px -24px rgba(0,0,0,0.6);
+}
+.arcade-frame .game-panel {
+  background: transparent !important;
+  border-radius: 8px;
+}
+.arcade-stub-note {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: rgba(251,245,232,0.7) !important;
+}
+
+
 .visit {
   background: var(--shed-red-deep) !important;
   color: var(--trim-white) !important;
@@ -711,7 +796,12 @@ button { font: inherit; }
 .site-footer a:hover { text-decoration: underline; }
 
 /* ---- Glizzy Gauntlet (platformer) --------------------------------- */
-.platformer-stage { touch-action: manipulation; }
+.platformer-stage {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 .platformer-hud {
   display: flex;
   justify-content: center;
@@ -724,16 +814,52 @@ button { font: inherit; }
   color: var(--sunset-gold) !important;
 }
 .platformer-hud b { color: var(--trim-white) !important; font-size: 1rem; }
+.pause-btn {
+  align-self: center;
+  padding: 0.4em 0.9em !important;
+  font-size: 0.68rem !important;
+  border-color: rgba(251,245,232,0.5) !important;
+  color: var(--trim-white) !important;
+  background: transparent !important;
+}
+.pause-btn:hover { background: rgba(251,245,232,0.1) !important; }
+
+.pause-badge {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  background: rgba(14,20,35,0.85) !important;
+  border: 2px solid var(--sunset-gold);
+  border-radius: 999px;
+  padding: 0.5em 0.6em 0.5em 1.1em;
+  z-index: 5;
+  pointer-events: auto;
+}
+.pause-badge span {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--trim-white) !important;
+}
 
 .platformer-canvas-wrap {
   position: relative;
-  max-width: 420px;
+  max-width: 560px;
   margin: 0 auto var(--space-3);
   border: 4px solid var(--brass);
   border-radius: 8px;
   overflow: hidden;
   line-height: 0;
   box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 #pfCanvas {
   display: block;
@@ -753,18 +879,28 @@ button { font: inherit; }
   padding: var(--space-2);
 }
 .overlay-title { font-family: var(--font-display) !important; font-size: 1.3rem !important; color: var(--trim-white) !important; margin-bottom: 0.3em !important; }
-.overlay-sub { font-size: 0.85rem !important; color: rgba(251,245,232,0.85) !important; max-width: 26ch; margin-left: auto; margin-right: auto; }
+.overlay-sub { font-size: 0.85rem !important; color: rgba(251,245,232,0.85) !important; max-width: 32ch; margin-left: auto; margin-right: auto; }
 #pfOverlayResult p#pfMessage { font-family: var(--font-display); font-style: italic; font-size: 1.1rem; color: var(--sunset-gold) !important; margin-bottom: 0.6em; }
 
 .platformer-controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  max-width: 420px;
+  max-width: 560px;
   margin: 0 auto;
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-.pf-dpad { display: flex; gap: 0.6em; }
+.pf-dpad {
+  display: flex;
+  gap: 0.6em;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
 .pf-btn {
   width: 58px;
   height: 58px;
@@ -778,8 +914,9 @@ button { font: inherit; }
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: none;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -793,3 +930,70 @@ button { font: inherit; }
   border-color: var(--trim-white);
 }
 .pf-btn-jump:active { background: var(--shed-red-deep) !important; }
+
+/* ---- Glizzy Maze ---------------------------------------------------- */
+.maze-stage {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.maze-hud {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-2);
+  color: var(--sunset-gold) !important;
+}
+.maze-hud b { color: var(--trim-white) !important; font-size: 1rem; }
+
+.maze-canvas-wrap {
+  position: relative;
+  max-width: 480px;
+  margin: 0 auto var(--space-3);
+  border: 4px solid var(--brass);
+  border-radius: 8px;
+  overflow: hidden;
+  line-height: 0;
+  box-shadow: 0 20px 40px -20px rgba(0,0,0,0.5);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+#mzCanvas { display: block; width: 100%; height: auto; background: #0e1626; touch-action: none; }
+.maze-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(14,20,35,0.78) !important;
+  padding: var(--space-2);
+}
+
+.maze-controls {
+  display: flex;
+  justify-content: center;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.mz-dpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(3, 54px);
+  gap: 0.4em;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.mz-btn { width: 54px; height: 54px; }
+.mz-dpad-center { width: 54px; height: 54px; }

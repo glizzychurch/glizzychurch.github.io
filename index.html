@@ -22,6 +22,7 @@
       <ul>
         <li><a href="#story">Story</a></li>
         <li><a href="#rites">Rites</a></li>
+        <li><a href="#arcade">Arcade</a></li>
         <li><a href="#shedfest">Shed-Fest</a></li>
         <li><a href="#gallery">Gallery</a></li>
         <li><a href="#visit">Visit</a></li>
@@ -109,8 +110,27 @@
           </div>
         </div>
       </div>
+      </div>
+  </section>
 
-      <div class="game-panel reveal">
+  <!-- ============================= ARCADE ============================= -->
+  <section class="arcade" id="arcade">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">THE ARCADE</p>
+        <h2>Prove yourself</h2>
+        <p>Four games, four leaderboards, zero mercy. Pick your poison.</p>
+      </div>
+
+      <div class="arcade-tabs reveal" role="tablist">
+        <button class="arcade-tab active" data-panel="chomp" role="tab" aria-selected="true">Glizzy Chomp</button>
+        <button class="arcade-tab" data-panel="pour" role="tab" aria-selected="false">Perfect Pour</button>
+        <button class="arcade-tab" data-panel="gauntlet" role="tab" aria-selected="false">Glizzy Gauntlet</button>
+        <button class="arcade-tab" data-panel="maze" role="tab" aria-selected="false">Glizzy Maze</button>
+      </div>
+
+      <div class="arcade-frame reveal">
+      <div class="game-panel" data-panel="chomp">
         <p class="eyebrow on-dark">PROVE YOUR DEVOTION</p>
         <h3>Glizzy Chomp</h3>
         <p>15 seconds. Tap the glizzy. Achieve sainthood.</p>
@@ -149,13 +169,14 @@
         </div>
       </div>
 
-      <div class="game-panel reveal">
+      <div class="game-panel" data-panel="pour" hidden>
         <p class="eyebrow on-dark">COMMUNION, TIMED RIGHT</p>
         <h3>Perfect Pour</h3>
-        <p>Tap to stop the pour. Too shy, too foamy, or all over the bar — you'll know.</p>
+        <p>Tap to stop the pour. Land it clean and the next glass queues up faster. One bad pour and it's over.</p>
         <div class="game-stage pour-stage">
           <div class="pour-hud">
             <span>Fill<br><b id="ppFill">0%</b></span>
+            <span>Streak<br><b id="ppStreak">0</b></span>
             <span>Best<br><b id="ppBest">0</b></span>
           </div>
           <div class="pour-glass-wrap">
@@ -165,6 +186,7 @@
                 <span class="pour-foam" aria-hidden="true"></span>
               </span>
             </button>
+            <div class="pour-round-flash" id="ppRoundFlash" aria-hidden="true"></div>
           </div>
           <div class="game-result" id="ppResult" hidden>
             <p id="ppMessage"></p>
@@ -188,7 +210,7 @@
         </div>
       </div>
 
-      <div class="game-panel reveal">
+      <div class="game-panel" data-panel="gauntlet" hidden>
         <p class="eyebrow on-dark">THE THIRD RITE</p>
         <h3>Glizzy Gauntlet</h3>
         <p>Left, right, jump. Get to The Shed before you eat dirt.</p>
@@ -197,6 +219,7 @@
           <div class="platformer-hud">
             <span>Score<br><b id="pfScore">0</b></span>
             <span>Best<br><b id="pfBest">0</b></span>
+            <button class="btn btn-small pause-btn" id="pfPause" hidden>Pause</button>
           </div>
 
           <div class="platformer-canvas-wrap">
@@ -219,6 +242,10 @@
                 <button class="btn btn-primary" id="pfRetry">Try Again</button>
               </div>
             </div>
+            <div class="pause-badge" id="pfPauseBadge" hidden>
+              <span>Paused</span>
+              <button class="btn btn-primary btn-small" id="pfResume">Resume</button>
+            </div>
           </div>
 
           <div class="platformer-controls" aria-hidden="false">
@@ -236,6 +263,68 @@
           <ol class="leaderboard-list" id="pfLeaderboardList">
             <li class="leaderboard-empty">Loading leaderboard…</li>
           </ol>
+        </div>
+      </div>
+        <div class="game-panel" data-panel="maze" hidden>
+          <p class="eyebrow on-dark">THE FOURTH RITE</p>
+          <h3>Glizzy Maze</h3>
+          <p>Clear every glizzy, dodge the crew.</p>
+
+          <div class="maze-stage">
+            <div class="maze-hud">
+              <span>Score<br><b id="mzScore">0</b></span>
+              <span>Best<br><b id="mzBest">0</b></span>
+              <button class="btn btn-small pause-btn" id="mzPause" hidden>Pause</button>
+            </div>
+
+            <div class="maze-canvas-wrap">
+              <canvas id="mzCanvas" width="442" height="546" aria-label="Glizzy Maze game screen"></canvas>
+              <div class="maze-overlay" id="mzOverlay">
+                <div id="mzOverlayStart">
+                  <p class="overlay-title">Glizzy Maze</p>
+                  <p class="overlay-sub">Swipe or tap the D-pad to move. Clear every glizzy, dodge the crew, grab a Cold One if you need the edge.</p>
+                  <button class="btn btn-primary" id="mzStart">Start</button>
+                </div>
+                <div id="mzOverlayResult" hidden>
+                  <p id="mzMessage"></p>
+                  <div class="score-submit" id="mzSubmitBox" hidden>
+                    <p class="score-submit-prompt">Top 5! Put your name on it:</p>
+                    <div class="score-submit-row">
+                      <input type="text" id="mzNameInput" maxlength="24" placeholder="Your name" autocomplete="off">
+                      <button class="btn btn-primary btn-small" id="mzSubmitBtn">Add</button>
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" id="mzRetry">Try Again</button>
+                </div>
+              </div>
+              <div class="pause-badge" id="mzPauseBadge" hidden>
+                <span>Paused</span>
+                <button class="btn btn-primary btn-small" id="mzResume">Resume</button>
+              </div>
+            </div>
+
+            <div class="maze-controls" aria-hidden="false">
+              <div class="mz-dpad-grid">
+                <span></span>
+                <button class="pf-btn mz-btn" id="mzUp" aria-label="Move up">▲</button>
+                <span></span>
+                <button class="pf-btn mz-btn" id="mzLeft" aria-label="Move left">◀</button>
+                <span class="mz-dpad-center"></span>
+                <button class="pf-btn mz-btn" id="mzRight" aria-label="Move right">▶</button>
+                <span></span>
+                <button class="pf-btn mz-btn" id="mzDown" aria-label="Move down">▼</button>
+                <span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="leaderboard" id="mzLeaderboard">
+            <p class="eyebrow on-dark leaderboard-title">Longest Survivors</p>
+            <p class="leaderboard-season" id="mzSeasonLabel"></p>
+            <ol class="leaderboard-list" id="mzLeaderboardList">
+              <li class="leaderboard-empty">Loading leaderboard…</li>
+            </ol>
+          </div>
         </div>
       </div>
     </div>
