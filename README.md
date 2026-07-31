@@ -174,6 +174,17 @@ time, double check `STREAK_TIME_START` and `STREAK_TIME_FLOOR` (same
 section) still make sense against it — the floor in particular needs to
 stay achievable even while detouring for every glizzy.
 
+**Two bugs fixed:** leaderboard submissions across all four games used
+to silently swallow write failures — if Firebase rejected a score (for
+example, a streak total over the old validation cap, before it was
+raised), the UI still claimed "Added!" even though nothing was actually
+saved. All four games now show an honest error and re-enable the submit
+button on failure instead. Separately, the lap-transition flash text
+("+230! Lap 2...") never actually hid itself after appearing — it stayed
+at full opacity indefinitely, showing through on top of whatever came
+next. Both this and Perfect Pour's identical round-flash bug are fixed
+to fade out on their own before the next state appears.
+
 ## About the Glizzy Maze game
 
 The fourth game — a small Pac-Man-style chase, canvas-rendered, grid-based

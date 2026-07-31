@@ -343,12 +343,18 @@ document.addEventListener(
     submitBtn.disabled = true;
     scoresRef
       .push({ name: name, score: score, ts: Date.now() })
-      .catch(function () {})
       .then(function () {
         submitBox.classList.add("submitted");
         const note = document.createElement("p");
         note.className = "score-submit-note";
         note.textContent = "Added! Nice glizzying.";
+        submitBox.appendChild(note);
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        const note = document.createElement("p");
+        note.className = "score-submit-note score-submit-error";
+        note.textContent = "Couldn't save that — check your connection and try again.";
         submitBox.appendChild(note);
       });
   }
@@ -466,6 +472,7 @@ document.addEventListener(
   let sessionScore = 0;
   let sessionInitialDuration = 2600;
   let autoContinueTimer = null;
+  let roundFlashHideTimer = null;
 
   function getBest() {
     try {
@@ -579,12 +586,18 @@ document.addEventListener(
     submitBtn.disabled = true;
     scoresRef
       .push({ name: name, score: pendingScore, ts: Date.now() })
-      .catch(function () {})
       .then(function () {
         submitBox.classList.add("submitted");
         const note = document.createElement("p");
         note.className = "score-submit-note";
         note.textContent = "Added! Steady hands indeed.";
+        submitBox.appendChild(note);
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        const note = document.createElement("p");
+        note.className = "score-submit-note score-submit-error";
+        note.textContent = "Couldn't save that — check your connection and try again.";
         submitBox.appendChild(note);
       });
   }
@@ -637,6 +650,8 @@ document.addEventListener(
 
   function startSession() {
     clearTimeout(autoContinueTimer);
+    clearTimeout(roundFlashHideTimer);
+    roundFlashEl.classList.remove("show");
     resultEl.hidden = true;
     submitBox.hidden = true;
     submitBox.classList.remove("submitted");
@@ -661,9 +676,15 @@ document.addEventListener(
     // eslint-disable-next-line no-unused-expressions
     roundFlashEl.offsetWidth; // restart the animation
     roundFlashEl.classList.add("show");
+    clearTimeout(roundFlashHideTimer);
+    roundFlashHideTimer = setTimeout(function () {
+      roundFlashEl.classList.remove("show");
+    }, ROUND_FLASH_MS - 250);
   }
 
   function endSession(finalFill) {
+    clearTimeout(roundFlashHideTimer);
+    roundFlashEl.classList.remove("show");
     startBtn.hidden = false;
     startBtn.disabled = false;
     startBtn.textContent = "Pour Again";
@@ -802,6 +823,7 @@ document.addEventListener(
   let sessionScore = 0;
   let currentTimeLimit = STREAK_TIME_START;
   let lapContinueTimer = null;
+  let lapFlashHideTimer = null;
   let lapTransitioning = false;
   const TOTAL_COLLECTIBLES = collectiblesTemplate.length;
   let rafId = null;
@@ -920,12 +942,18 @@ document.addEventListener(
     submitBtn.disabled = true;
     scoresRef
       .push({ name: name, score: pendingScore, ts: Date.now() })
-      .catch(function () {})
       .then(function () {
         submitBox.classList.add("submitted");
         const note = document.createElement("p");
         note.className = "score-submit-note";
         note.textContent = "Added! See you at The Shed.";
+        submitBox.appendChild(note);
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        const note = document.createElement("p");
+        note.className = "score-submit-note score-submit-error";
+        note.textContent = "Couldn't save that — check your connection and try again.";
         submitBox.appendChild(note);
       });
   }
@@ -1160,6 +1188,8 @@ document.addEventListener(
   function startRun() {
     gameState = "playing";
     clearTimeout(lapContinueTimer);
+    clearTimeout(lapFlashHideTimer);
+    lapFlashEl.classList.remove("show");
     streakCount = 0;
     sessionScore = 0;
     currentTimeLimit = STREAK_TIME_START;
@@ -1201,6 +1231,10 @@ document.addEventListener(
     // eslint-disable-next-line no-unused-expressions
     lapFlashEl.offsetWidth; // restart the animation
     lapFlashEl.classList.add("show");
+    clearTimeout(lapFlashHideTimer);
+    lapFlashHideTimer = setTimeout(function () {
+      lapFlashEl.classList.remove("show");
+    }, LAP_FLASH_MS - 300); // fades out just before the next lap/result appears, not after
   }
 
   function handleGoalReached() {
@@ -1239,6 +1273,8 @@ document.addEventListener(
     gameState = "result";
     cancelAnimationFrame(rafId);
     clearTimeout(lapContinueTimer);
+    clearTimeout(lapFlashHideTimer);
+    lapFlashEl.classList.remove("show");
     lapTransitioning = false;
     pauseBtn.hidden = true;
     setPageScrollLocked(false);
@@ -1579,12 +1615,18 @@ document.addEventListener(
     submitBtn.disabled = true;
     scoresRef
       .push({ name: name, score: pendingScore, ts: Date.now() })
-      .catch(function () {})
       .then(function () {
         submitBox.classList.add("submitted");
         const note = document.createElement("p");
         note.className = "score-submit-note";
         note.textContent = "Added! The crew will remember this.";
+        submitBox.appendChild(note);
+      })
+      .catch(function () {
+        submitBtn.disabled = false;
+        const note = document.createElement("p");
+        note.className = "score-submit-note score-submit-error";
+        note.textContent = "Couldn't save that — check your connection and try again.";
         submitBox.appendChild(note);
       });
   }
