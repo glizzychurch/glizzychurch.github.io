@@ -199,10 +199,16 @@ On mobile, movement is swipe-only now — swipe left/right/up/down
 anywhere on the game screen or in the swipe zone below it (the on-screen
 d-pad is gone; it didn't work well on touch or trackpads, and one clear
 gesture area is more reliable than four small buttons). On desktop,
-keyboard controls are unchanged: arrow keys or WASD. The whole page is
-locked from scrolling while a run is in progress or paused — a fast
-swipe anywhere near the game, even starting outside the game area
-itself, can't drag the site around underneath you.
+keyboard controls are unchanged: arrow keys or WASD.
+
+**Page-scroll lock applies to all four games now, not just this one** —
+while any round is in progress (or paused, where a game has pause), the
+whole page is locked so a swipe can't drag the site around, and in
+Glizzy Chomp's case, can't shift the tap target out from under a
+finger mid-tap. One bug worth noting for the curious: the lock was
+originally only applied to `<body>`, which silently did nothing —
+`<html>`, not `<body>`, is the actual scrolling element in a
+standards-mode page, so the fix locks both.
 
 **The four chasers** are humanoid now (not ghost blobs), each with a
 prop that makes them recognizable at a glance, plus real distinct

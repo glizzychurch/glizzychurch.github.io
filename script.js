@@ -86,6 +86,28 @@ document.getElementById("year").textContent = new Date().getFullYear();
   });
 })();
 
+// Shared page-scroll lock, used by all four arcade games while a round is
+// actively in progress (and, where a game has pause, while paused too) so a
+// stray swipe/scroll gesture can't move the page — or, in Glizzy Chomp's
+// case, move the tap target out from under a finger mid-tap.
+function setPageScrollLocked(locked) {
+  // The actual scrolling element in a standards-mode document is <html>,
+  // not <body> — locking overflow on body alone silently does nothing.
+  document.documentElement.classList.toggle("game-scroll-lock", locked);
+  document.body.classList.toggle("game-scroll-lock", locked);
+}
+// The CSS class alone (overflow:hidden) doesn't reliably stop touch-drag
+// scrolling on its own — this is the backup that actually blocks it, and it
+// checks the shared class rather than any one game's state, so it covers
+// all four without each needing its own copy.
+document.addEventListener(
+  "touchmove",
+  function (e) {
+    if (document.documentElement.classList.contains("game-scroll-lock")) e.preventDefault();
+  },
+  { passive: false }
+);
+
 // Arcade tabs
 (function setupArcadeTabs() {
   const tabs = document.querySelectorAll(".arcade-tab");
@@ -356,7 +378,8 @@ document.getElementById("year").textContent = new Date().getFullYear();
     startBtn.hidden = true;
     startBtn.disabled = true;
     target.disabled = false;
-    target.focus();
+    target.focus({ preventScroll: true });
+    setPageScrollLocked(true);
     timer = setInterval(tick, 1000);
   }
 
@@ -367,6 +390,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     startBtn.hidden = false;
     startBtn.disabled = false;
     startBtn.textContent = "Play Again";
+    setPageScrollLocked(false);
     const best = Math.max(getBest(), score);
     setBest(best);
     bestEl.textContent = best;
@@ -607,7 +631,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     duration = durationForRound(streakCount + 1);
     pouring = true;
     startTime = performance.now();
-    glass.focus();
+    glass.focus({ preventScroll: true });
     rafId = requestAnimationFrame(frame);
   }
 
@@ -627,6 +651,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     sessionScore = 0;
     streakEl.textContent = "0";
     sessionInitialDuration = INITIAL_DURATION_MIN + Math.random() * (INITIAL_DURATION_MAX - INITIAL_DURATION_MIN);
+    setPageScrollLocked(true);
     beginRound();
   }
 
@@ -642,6 +667,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     startBtn.hidden = false;
     startBtn.disabled = false;
     startBtn.textContent = "Pour Again";
+    setPageScrollLocked(false);
 
     const roundedTotal = Math.round(sessionScore * 100) / 100;
     pendingScore = roundedTotal;
@@ -1122,6 +1148,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     nameInput.value = "";
     submitBtn.disabled = false;
     pauseBtn.hidden = false;
+    setPageScrollLocked(true);
     loop();
   }
 
@@ -1147,6 +1174,7 @@ document.getElementById("year").textContent = new Date().getFullYear();
     gameState = "result";
     cancelAnimationFrame(rafId);
     pauseBtn.hidden = true;
+    setPageScrollLocked(false);
 
     const elapsedSec = (performance.now() - startTime) / 1000;
     let score = liveScore();
@@ -2351,23 +2379,6 @@ document.getElementById("year").textContent = new Date().getFullYear();
   }
   setupSwipeOn(canvas);
   setupSwipeOn(swipeZone);
-
-  // Full-page scroll lock while actively playing or paused — belt and
-  // suspenders on top of the touch-action:none CSS. A stray swipe starting
-  // just outside the game area (not just inside it) can't drag the page.
-  (function lockDownScrolling() {
-    document.addEventListener(
-      "touchmove",
-      function (e) {
-        if (gameState === "playing" || gameState === "paused") e.preventDefault();
-      },
-      { passive: false }
-    );
-  })();
-
-  function setPageScrollLocked(locked) {
-    document.body.classList.toggle("game-scroll-lock", locked);
-  }
 
   window.addEventListener("keydown", function (e) {
     if (gameState !== "playing" || e.isTrusted === false) return;
