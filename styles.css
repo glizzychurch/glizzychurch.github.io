@@ -501,6 +501,8 @@ button { font: inherit; }
   position: absolute;
   top: 40%;
   left: 50%;
+  max-width: 85%;
+  text-align: center;
   transform: translate(-50%, -50%) scale(0.8);
   font-family: var(--font-display);
   font-style: italic;
@@ -810,6 +812,7 @@ button { font: inherit; }
 }
 .platformer-hud {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-4);
   font-family: var(--font-mono);

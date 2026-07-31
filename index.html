@@ -237,6 +237,7 @@
         <div class="platformer-stage">
           <div class="platformer-hud">
             <span>Score<br><b id="pfScore">0</b></span>
+            <span>Streak<br><b id="pfStreak">0</b></span>
             <span>Best<br><b id="pfBest">0</b></span>
             <button class="btn btn-small pause-btn" id="pfPause" hidden>Pause</button>
           </div>
@@ -246,7 +247,7 @@
             <div class="platformer-overlay" id="pfOverlay">
               <div id="pfOverlayStart">
                 <p class="overlay-title">Glizzy Gauntlet</p>
-                <p class="overlay-sub">◀ ▶ to move, ▲ to jump. Grab glizzies, don't fall in.</p>
+                <p class="overlay-sub">◀ ▶ to move, ▲ to jump. Grab every glizzy and beat the clock to keep the streak going.</p>
                 <button class="btn btn-primary" id="pfStart">Start</button>
               </div>
               <div id="pfOverlayResult" hidden>
@@ -261,6 +262,7 @@
                 <button class="btn btn-primary" id="pfRetry">Try Again</button>
               </div>
             </div>
+            <div class="pour-round-flash" id="pfLapFlash" aria-hidden="true"></div>
             <div class="pause-badge" id="pfPauseBadge" hidden>
               <span>Paused</span>
               <button class="btn btn-primary btn-small" id="pfResume">Resume</button>

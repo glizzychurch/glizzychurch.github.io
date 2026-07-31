@@ -23,14 +23,14 @@ const albums = [
     year: "2025",
     title: "The First Gathering",
     blurb: "Where it all began — The Shed goes up, the tradition gets named.",
-    link: "",
+    link: "https://photos.app.goo.gl/w9jjUbbM1C1P3XRk9",
     cover: "images/shed-photo.jpg"
   },
   {
     year: "2026",
     title: "Shed-Fest 2026",
     blurb: "The lineup is fiction. Brookville Lake is very real. So are the sunburns.",
-    link: "",
+    link: "https://photos.app.goo.gl/qA5pecH43MmT725U7",
     cover: "images/shedfest-poster.jpg"
   }
 ];
@@ -730,6 +730,7 @@ document.addEventListener(
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   const scoreEl = document.getElementById("pfScore");
+  const streakEl = document.getElementById("pfStreak");
   const bestEl = document.getElementById("pfBest");
   const overlay = document.getElementById("pfOverlay");
   const overlayStart = document.getElementById("pfOverlayStart");
@@ -739,6 +740,7 @@ document.addEventListener(
   const pauseBtn = document.getElementById("pfPause");
   const resumeBtn = document.getElementById("pfResume");
   const pauseBadge = document.getElementById("pfPauseBadge");
+  const lapFlashEl = document.getElementById("pfLapFlash");
   const messageEl = document.getElementById("pfMessage");
   const submitBox = document.getElementById("pfSubmitBox");
   const nameInput = document.getElementById("pfNameInput");
@@ -757,8 +759,12 @@ document.addEventListener(
   const MAX_FALL_SPEED = 12;
   const PLAYER_W = 20, PLAYER_H = 28;
   const GROUND_Y = 190;
-  const TIME_LIMIT_SEC = 90;
+  const TIME_LIMIT_SEC = 90; // absolute per-attempt safety net, separate from the streak's own time limit
   const BOARD_SIZE = 5;
+  const STREAK_TIME_START = 30; // seconds — generous, comfortable even with detours for every glizzy
+  const STREAK_TIME_STEP = 3; // gets this much tighter each successful lap
+  const STREAK_TIME_FLOOR = 18; // never gets tighter than this
+  const LAP_FLASH_MS = 1300;
 
   const platforms = [
     { x: 0, y: GROUND_Y, w: 280, h: 40 },
@@ -792,6 +798,12 @@ document.addEventListener(
   let collectedCount = 0;
   let startTime = 0;
   let runFrame = 0;
+  let streakCount = 0;
+  let sessionScore = 0;
+  let currentTimeLimit = STREAK_TIME_START;
+  let lapContinueTimer = null;
+  let lapTransitioning = false;
+  const TOTAL_COLLECTIBLES = collectiblesTemplate.length;
   let rafId = null;
   let gameState = "idle"; // idle | playing | result
   let fallbackBest = 0;
@@ -998,16 +1010,16 @@ document.addEventListener(
     camera.x = Math.max(0, Math.min(player.x - VIEW_W / 2, LEVEL_WIDTH - VIEW_W));
 
     if (player.y > VIEW_H + 60) {
-      endRun(false, "fell");
+      endRun("fell");
       return;
     }
     const elapsedSec = (performance.now() - startTime) / 1000;
     if (elapsedSec > TIME_LIMIT_SEC) {
-      endRun(false, "timeout");
+      endRun("timeout");
       return;
     }
     if (player.x + PLAYER_W >= goal.x) {
-      endRun(true, "goal");
+      handleGoalReached();
       return;
     }
 
@@ -1083,19 +1095,28 @@ document.addEventListener(
 
   function drawGoal() {
     ctx.save();
-    ctx.strokeStyle = "#c9a227";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(goal.x, goal.y);
-    ctx.lineTo(goal.x, goal.y - 70);
-    ctx.stroke();
+    const w = 44, h = 50;
+    const x0 = goal.x - 2;
+    const y0 = goal.y - h;
+
+    // Red walls
     ctx.fillStyle = "#b23a28";
-    ctx.beginPath();
-    ctx.moveTo(goal.x, goal.y - 70);
-    ctx.lineTo(goal.x + 22, goal.y - 61);
-    ctx.lineTo(goal.x, goal.y - 52);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(x0, y0, w, h);
+
+    // White corner trim and fascia strip under the roofline
+    ctx.fillStyle = "#fbf5e8";
+    ctx.fillRect(x0, y0, 4, h);
+    ctx.fillRect(x0 + w - 4, y0, 4, h);
+    ctx.fillRect(x0, y0, w, 4);
+
+    // Small white door
+    ctx.fillStyle = "#fbf5e8";
+    ctx.fillRect(x0 + w / 2 - 7, y0 + h - 24, 14, 24);
+
+    // Black roof slab, overhanging both sides
+    ctx.fillStyle = "#1b1815";
+    ctx.fillRect(x0 - 7, y0 - 10, w + 14, 12);
+
     ctx.restore();
   }
 
@@ -1138,6 +1159,11 @@ document.addEventListener(
 
   function startRun() {
     gameState = "playing";
+    clearTimeout(lapContinueTimer);
+    streakCount = 0;
+    sessionScore = 0;
+    currentTimeLimit = STREAK_TIME_START;
+    streakEl.textContent = "0";
     resetRun();
     overlay.hidden = true;
     submitBox.hidden = true;
@@ -1153,7 +1179,7 @@ document.addEventListener(
   }
 
   function pauseGame() {
-    if (gameState !== "playing") return;
+    if (gameState !== "playing" || lapTransitioning) return;
     gameState = "paused";
     cancelAnimationFrame(rafId);
     pauseStartedAt = performance.now();
@@ -1169,41 +1195,85 @@ document.addEventListener(
     loop();
   }
 
-  function endRun(success, reason) {
-    if (gameState !== "playing") return;
+  function showLapFlash(text) {
+    lapFlashEl.textContent = text;
+    lapFlashEl.classList.remove("show");
+    // eslint-disable-next-line no-unused-expressions
+    lapFlashEl.offsetWidth; // restart the animation
+    lapFlashEl.classList.add("show");
+  }
+
+  function handleGoalReached() {
+    const elapsedSec = (performance.now() - startTime) / 1000;
+    const timeBonus = Math.max(0, Math.round(100 - elapsedSec * 2));
+    const roundScore = liveScore() + 150 + timeBonus;
+    sessionScore += roundScore;
+
+    const gotAll = collectedCount === TOTAL_COLLECTIBLES;
+    const fastEnough = elapsedSec <= currentTimeLimit;
+
+    if (gotAll && fastEnough) {
+      streakCount += 1;
+      streakEl.textContent = String(streakCount);
+      currentTimeLimit = Math.max(STREAK_TIME_FLOOR, currentTimeLimit - STREAK_TIME_STEP);
+      scoreEl.textContent = String(sessionScore);
+      showLapFlash("+" + roundScore + "! Lap " + streakCount + " · beat " + currentTimeLimit.toFixed(0) + "s");
+      cancelAnimationFrame(rafId);
+      lapTransitioning = true;
+      pauseBtn.disabled = true; // brief window between laps — nothing useful to pause
+      lapContinueTimer = setTimeout(function () {
+        lapTransitioning = false;
+        pauseBtn.disabled = false;
+        if (gameState !== "playing") return; // guard in case the game somehow ended during the flash window
+        resetRun();
+        loop();
+      }, LAP_FLASH_MS);
+      return;
+    }
+
+    const why = !gotAll ? "Missed a glizzy." : "Too slow to keep the streak going.";
+    finishSession("Made it to The Shed in " + elapsedSec.toFixed(1) + "s! " + why);
+  }
+
+  function finishSession(message) {
     gameState = "result";
     cancelAnimationFrame(rafId);
+    clearTimeout(lapContinueTimer);
+    lapTransitioning = false;
     pauseBtn.hidden = true;
     setPageScrollLocked(false);
 
-    const elapsedSec = (performance.now() - startTime) / 1000;
-    let score = liveScore();
-    let message;
-    if (success) {
-      const timeBonus = Math.max(0, Math.round(100 - elapsedSec * 2));
-      score += 150 + timeBonus;
-      message = "Made it to The Shed in " + elapsedSec.toFixed(1) + "s!";
-    } else if (reason === "timeout") {
-      message = "Ran out the clock. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
-    } else {
-      message = "Down you go. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
-    }
-
-    scoreEl.textContent = String(score);
-    const best = Math.max(getBest(), score);
+    const total = Math.round(sessionScore);
+    scoreEl.textContent = String(total);
+    const best = Math.max(getBest(), total);
     setBest(best);
     bestEl.textContent = best;
-    pendingScore = score;
-    messageEl.textContent = message + " — " + score + " pts";
-    submitBox.hidden = !qualifiesForBoard(score);
+    pendingScore = total;
+
+    messageEl.textContent =
+      streakCount > 0
+        ? message + " Streak of " + streakCount + " banked " + total + " pts."
+        : message + " " + total + " pts.";
+    submitBox.hidden = !qualifiesForBoard(total);
     showOverlay("result");
   }
 
-  function loop() {
+  function endRun(reason) {
     if (gameState !== "playing") return;
+    // Fell or ran out the clock entirely — this attempt earns nothing, the
+    // streak ends with whatever was already banked from prior clean laps.
+    const message =
+      reason === "timeout"
+        ? "Ran out the clock. (" + Math.round(currentProgressPct() * 100) + "% of the way there)"
+        : "Down you go. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    finishSession(message);
+  }
+
+  function loop() {
+    if (gameState !== "playing" || lapTransitioning) return;
     updatePhysics();
     render();
-    if (gameState === "playing") rafId = requestAnimationFrame(loop);
+    if (gameState === "playing" && !lapTransitioning) rafId = requestAnimationFrame(loop);
   }
 
   /* ---- Input ------------------------------------------------------------ */
@@ -1920,13 +1990,55 @@ document.addEventListener(
     ctx.restore();
   }
 
+  function drawBeerMug(cx, cy, scale) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    const x0 = -7, x1 = 7; // body spans 14 wide
+    const yTop = -9, yBot = 7; // body spans 16 tall
+
+    // Black outline silhouette
+    ctx.fillStyle = "#1b1815";
+    ctx.fillRect(x0 - 1.5, yTop - 3, (x1 - x0) + 3, (yBot - yTop) + 6);
+
+    // Glass interior base
+    ctx.fillStyle = "#fbf5e8";
+    ctx.fillRect(x0, yTop, x1 - x0, yBot - yTop);
+
+    // Beer — gold upper band, amber lower band
+    ctx.fillStyle = "#f2a63d";
+    ctx.fillRect(x0, yTop + 5, x1 - x0, 6);
+    ctx.fillStyle = "#c9711f";
+    ctx.fillRect(x0, yTop + 11, x1 - x0, (yBot - (yTop + 11)) - 2);
+
+    // Glass tint at the base
+    ctx.fillStyle = "#8fd0e8";
+    ctx.fillRect(x0, yBot - 2, x1 - x0, 2);
+
+    // Foam top — jagged, uneven edge for character
+    ctx.fillStyle = "#fbf5e8";
+    ctx.fillRect(x0, yTop, x1 - x0, 4);
+    ctx.fillRect(x0 - 1, yTop - 3, 4, 4);
+    ctx.fillRect(x0 + 4, yTop - 4, 4, 5);
+    ctx.fillRect(x1 - 3, yTop - 2, 3, 3);
+
+    // Handle — black outline with a blue glass-tint window
+    ctx.fillStyle = "#1b1815";
+    ctx.fillRect(x1, yTop + 2, 5, 10);
+    ctx.fillStyle = "#8fd0e8";
+    ctx.fillRect(x1 + 1, yTop + 3.5, 2, 7);
+
+    ctx.restore();
+  }
+
   function drawPellets() {
     pellets.forEach(function (p) {
       drawHotDog(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, 0.85);
     });
     const pulse = 1 + Math.sin(performance.now() / 150) * 0.12;
     powerPellets.forEach(function (p) {
-      drawHotDog(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, 1.7 * pulse);
+      drawBeerMug(p.col * TILE + TILE / 2, p.row * TILE + TILE / 2, pulse);
     });
   }
 

@@ -138,20 +138,30 @@ the same check for good measure.
 The third game — a small hand-built platformer, canvas-rendered. Left/right
 buttons (or arrow keys / A-D) to move, the jump button (or up arrow / W /
 space) to jump. Single jump only, no double-jump. Get from the pool to
-The Shed, jump the gaps, clear the crate, grab glizzies along the way if
-you want the extra points.
+The Shed (an actual little shed now — red walls, white trim, black roof,
+not a flagpole), jump the gaps, clear the crate, grab every glizzy along
+the way.
 
-**Scoring:** distance reached (up to 100 pts) + 15 pts per glizzy
-collected (5 on the level) + 150 pts for actually reaching The Shed + up
-to 100 pts more the faster you finish. Falling or running out the
-90-second clock ends the run with whatever you'd banked so far — so
-partial attempts still score something, but only finishing gets the big
-bonuses.
+**Streak mode:** reach The Shed with all 5 glizzies collected *and*
+under the current time limit, and the level immediately resets for
+another lap — a little faster required each time (starts at 30s, tightens
+3s per lap, floors out at 18s so it never becomes literally impossible).
+Each lap's score banks into a running session total, which is what
+actually gets submitted to the leaderboard — that's what raises the
+ceiling, since a single lap alone tops out around 400-425 points. Reach
+the goal but miss a glizzy or run over time and the streak ends there
+(that lap still counts, it just doesn't continue). Falling or timing out
+entirely ends the streak with zero credit for that attempt — only
+whatever was already banked from clean laps.
+
+**Scoring, per lap:** distance reached (up to 100 pts) + 15 pts per
+glizzy collected (5 on the level) + 150 pts for reaching The Shed + up
+to 100 pts more the faster you finish.
 
 **A note on cheating:** jump and movement inputs only count if they're
-genuine browser-trusted events, same idea as the other two games — a
-script firing `.click()` or synthetic key events on the controls gets
-silently ignored rather than moving the character.
+genuine browser-trusted events, same idea as the other games — a script
+firing `.click()` or synthetic key events on the controls gets silently
+ignored rather than moving the character.
 
 **If you ever want to tweak the level:** it's defined as a plain array of
 platform rectangles near the top of the Glizzy Gauntlet section in
@@ -159,16 +169,21 @@ platform rectangles near the top of the Glizzy Gauntlet section in
 constants above that (`GRAVITY`, `JUMP_VELOCITY`, `MOVE_SPEED`) cap the
 maximum jump at about 99px horizontal / 100px vertical — keep new gaps
 and platform heights under that with some margin, or a jump literally
-becomes impossible to make.
+becomes impossible to make. If you tweak the level's minimum clean-clear
+time, double check `STREAK_TIME_START` and `STREAK_TIME_FLOOR` (same
+section) still make sense against it — the floor in particular needs to
+stay achievable even while detouring for every glizzy.
 
 ## About the Glizzy Maze game
 
 The fourth game — a small Pac-Man-style chase, canvas-rendered, grid-based
-movement. Arrow keys / WASD or the on-screen d-pad. Clear every glizzy in
-the yard while four chasers try to catch you. Grab a "Cold One" (the
-glowing power pellet in each corner) to turn the tables for a few seconds
-— chasers turn vulnerable and you can eat them for an escalating bonus
-(200, 400, 800, 1600 for a perfect run of four in one window). Watermelon,
+movement. Swipe, the on-screen swipe zone, or arrow keys / WASD. Clear
+every glizzy in the yard while four chasers try to catch you. Grab a
+"Cold One" — an actual little pixel-art beer mug now, gold-to-amber
+beer, foam head, blue glass tint — in each corner to turn the tables for
+a few seconds. Chasers turn vulnerable and you can eat them for an
+escalating bonus (200, 400, 800, 1600 for a perfect run of four in one
+window). Watermelon,
 popsicle, and horse bonus items occasionally appear near the pool for
 extra points.
 
@@ -332,7 +347,7 @@ of `Date.now()`.
          ".write": true,
          ".indexOn": "score",
          "$entry": {
-           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 500"
+           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 10000"
          }
        },
        "mazeScores": {
