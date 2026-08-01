@@ -936,6 +936,7 @@ document.addEventListener(
   let lapFlashHideTimer = null;
   let lapTransitioning = false;
   let rafId = null;
+  let lastFrameTime = 0;
   let gameState = "idle"; // idle | playing | result
   let fallbackBest = 0;
   let pendingScore = 0;
@@ -1097,14 +1098,14 @@ document.addEventListener(
     startTime = performance.now();
   }
 
-  function updatePhysics() {
+  function updatePhysics(dt) {
     let vx = 0;
     if (leftPressed) vx -= MOVE_SPEED;
     if (rightPressed) vx += MOVE_SPEED;
     if (vx < 0) player.facing = -1;
     if (vx > 0) player.facing = 1;
 
-    player.x += vx;
+    player.x += vx * dt;
     if (player.x < 0) player.x = 0;
     platforms.forEach(function (p) {
       const pr = { x: player.x, y: player.y, w: PLAYER_W, h: PLAYER_H };
@@ -1115,9 +1116,9 @@ document.addEventListener(
     });
 
     const wasOnGround = player.onGround;
-    player.vy += GRAVITY;
+    player.vy += GRAVITY * dt;
     if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
-    player.y += player.vy;
+    player.y += player.vy * dt;
     player.onGround = false;
     platforms.forEach(function (p) {
       const pr = { x: player.x, y: player.y, w: PLAYER_W, h: PLAYER_H };
@@ -1162,7 +1163,7 @@ document.addEventListener(
       const stunned = performance.now() < ch.stunnedUntil;
       if (!stunned) {
         const dir = player.x > ch.x ? 1 : -1;
-        ch.x = Math.max(ch.startX, Math.min(ch.endX, ch.x + dir * ch.speed));
+        ch.x = Math.max(ch.startX, Math.min(ch.endX, ch.x + dir * ch.speed * dt));
         ch.facing = dir;
       }
 
@@ -1204,7 +1205,7 @@ document.addEventListener(
       return;
     }
 
-    if ((leftPressed || rightPressed) && player.onGround) runFrame += 1;
+    if ((leftPressed || rightPressed) && player.onGround) runFrame += dt;
     scoreEl.textContent = String(liveScore());
   }
 
@@ -1471,6 +1472,7 @@ document.addEventListener(
     submitBtn.disabled = false;
     pauseBtn.hidden = false;
     setPageScrollLocked(true);
+    lastFrameTime = 0;
     loop();
   }
 
@@ -1488,6 +1490,7 @@ document.addEventListener(
     startTime += pausedMs; // so the elapsed-time clock doesn't count the pause
     gameState = "playing";
     pauseBadge.hidden = true;
+    lastFrameTime = 0;
     loop();
   }
 
@@ -1522,6 +1525,7 @@ document.addEventListener(
       if (gameState !== "playing") return; // guard in case the game somehow ended during the flash window
       loadLevel(streakCount);
       resetRun();
+      lastFrameTime = 0;
       loop();
     }, LAP_FLASH_MS);
   }
@@ -1568,7 +1572,13 @@ document.addEventListener(
 
   function loop() {
     if (gameState !== "playing" || lapTransitioning) return;
-    updatePhysics();
+    const now = performance.now();
+    // dt=1 represents exactly one 60fps frame's worth of real time. Capped
+    // at 3 so a backgrounded tab resuming (or any long stall) doesn't cause
+    // a single huge physics step that flings the player through geometry.
+    const dt = Math.min(3, lastFrameTime ? (now - lastFrameTime) / (1000 / 60) : 1);
+    lastFrameTime = now;
+    updatePhysics(dt);
     render();
     if (gameState === "playing" && !lapTransitioning) rafId = requestAnimationFrame(loop);
   }
@@ -1778,6 +1788,7 @@ document.addEventListener(
   let nextHorseAt = 0;
   let nextBonusAt = 0;
   let rafId = null;
+  let lastFrameTime = 0;
   let fallbackBest = 0;
   let runStartTime = 0;
 
@@ -2142,7 +2153,7 @@ document.addEventListener(
     }
   }
 
-  function updateHorse() {
+  function updateHorse(dt) {
     const now = performance.now();
     if (!horse) {
       if (now >= nextHorseAt) {
@@ -2157,7 +2168,7 @@ document.addEventListener(
       }
       return;
     }
-    horse.x += horse.dir * HORSE_SPEED;
+    horse.x += horse.dir * HORSE_SPEED * dt;
     horse.col = Math.max(0, Math.min(COLS - 1, Math.round(horse.x / TILE)));
     if (horse.x < -TILE * 1.5 || horse.x > (COLS + 1.5) * TILE) {
       horse = null;
@@ -2188,12 +2199,16 @@ document.addEventListener(
 
   function tick() {
     if (gameState !== "playing") return;
-    stepEntity(player, PLAYER_SPEED, playerChooseDir);
-    player.mouth += 0.25;
+    const now0 = performance.now();
+    const dt = Math.min(3, lastFrameTime ? (now0 - lastFrameTime) / (1000 / 60) : 1);
+    lastFrameTime = now0;
+
+    stepEntity(player, PLAYER_SPEED * dt, playerChooseDir);
+    player.mouth += 0.25 * dt;
 
     chasers.forEach(function (ch) {
       if (ch.mode === "eaten" && performance.now() < ch.eatenUntil) return; // paused while "returning"
-      stepEntity(ch, chaserSpeed(ch), chaserChooseDir);
+      stepEntity(ch, chaserSpeed(ch) * dt, chaserChooseDir);
       const now = performance.now();
       if ((ch.id === "shroom" || ch.id === "glitch") && ch.mode === "normal") {
         if (!ch.lastTrailPush || now - ch.lastTrailPush > 70) {
@@ -2208,7 +2223,7 @@ document.addEventListener(
 
     collectPellets();
     updateBonus();
-    updateHorse();
+    updateHorse(dt);
     updateChaserModes();
     checkChaserCollisions();
 
@@ -2707,6 +2722,7 @@ document.addEventListener(
     pauseBtn.hidden = false;
     setPageScrollLocked(true);
     render();
+    lastFrameTime = 0;
     rafId = requestAnimationFrame(tick);
   }
 
@@ -2724,6 +2740,7 @@ document.addEventListener(
     shiftAllTimers(pausedMs);
     gameState = "playing";
     pauseBadge.hidden = true;
+    lastFrameTime = 0;
     rafId = requestAnimationFrame(tick);
   }
 

@@ -71,6 +71,49 @@ value on both the tab and its game panel in `index.html`; adding a 5th
 game later means adding one more tab button and one more panel with the
 same `data-panel` name, no other wiring needed.
 
+**Fixed a real "runs in slow motion" bug in Gauntlet and Maze**, the two
+games with continuous `requestAnimationFrame` physics loops (Chomp is a
+simple interval timer, Perfect Pour's animation is time-based already —
+neither was affected). Both games moved things — player position,
+gravity, chaser speed, the Maze horse — using a fixed amount *per
+animation frame*, which quietly assumes a steady 60fps. That's fine
+right up until a device can't actually sustain 60fps, at which point
+the game doesn't get choppier, it gets *slower*, since half as many
+frames means half as much accumulated movement per real second. Given
+how much rendering complexity both games have picked up (detailed
+chaser art, wide-roaming AI, level-pool switching, pool rendering), it's
+very plausible some devices dropped below 60fps even though this
+sandbox's headless testing consistently rendered at a normal rate and
+never reproduced the slowdown directly.
+
+The fix: both games now compute `dt` each frame — real elapsed
+milliseconds divided by the duration of one nominal 60fps frame, so
+`dt` is 1 at exactly 60fps, 2 at 30fps, and so on — and every per-frame
+movement or gravity calculation is multiplied by it (`GRAVITY * dt`,
+`ch.speed * dt`, `HORSE_SPEED * dt`, etc.) instead of applied as a bare
+constant. `dt` is capped at 3 so a backgrounded tab resuming after a
+long stall can't produce one huge physics step that flings something
+through a wall. `lastFrameTime` resets to 0 at every point a loop
+(re)starts — a fresh run, resuming from pause, or Gauntlet's lap
+transition — so the very first frame after a gap always uses a safe
+`dt` of 1 rather than accidentally counting the gap itself as elapsed
+game time.
+
+Verified directly rather than just by inspection: patched
+`requestAnimationFrame` in a test page to genuinely halve the frame
+rate (confirmed at ~29fps via direct measurement, versus the normal
+~59fps), then compared real-world movement speed and jump-arc height
+between the two conditions. Before the fix this would have shown
+roughly half speed in the throttled case; after the fix, Gauntlet's
+horizontal speed and jump height matched within normal test-timing
+noise regardless of frame rate, and Maze's player movement along the
+tunnel row did the same (a chaser-movement comparison showed much
+larger swings between runs, but that's expected — chasers pick
+directions with a real random component, so trial-to-trial variance
+there reflects the AI's randomness, not a timing bug; the deterministic
+player-movement test is the one that actually isolates the timing
+behavior).
+
 ## About the Glizzy Chomp game
 
 It's a 15-second tap game in the Arcade section. Ranks:
