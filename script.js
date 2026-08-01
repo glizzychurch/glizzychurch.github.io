@@ -788,6 +788,10 @@ document.addEventListener(
   const COLLECTIBLE_BONUS = 15; // per glizzy collected, no requirement to get them all
   const STOMP_STUN_MS = 2000; // how long a stomped chaser stays frozen
   const STOMP_BOUNCE = -6.3; // small upward bounce on a successful stomp
+  const THROW_WINDUP_MS = 600; // telegraph before the object actually launches
+  const THROW_COOLDOWN_MS = 3500; // minimum gap between throws from the same chaser
+  const PROJECTILE_SPEED = 3.0; // px per nominal frame
+  const PROJECTILE_Y = GROUND_Y - 18; // roughly torso height on a standing player
   const LAP_FLASH_MS = 1300;
 
   const LEVELS = [
@@ -852,8 +856,7 @@ document.addEventListener(
         { id: "buschman", startX: 1220, endX: 1590, speed: 1.2 }
       ]
     },
-    // Lap 3 and beyond — the pool crossing plus two chasers. Hardest tier,
-    // repeats for every lap after this one.
+    // Lap 3 — the pool crossing plus two chasers, no throwing yet.
     {
       platforms: [
         { x: 0, y: GROUND_Y, w: 280, h: 40 },
@@ -884,6 +887,77 @@ document.addEventListener(
         { id: "buschman", startX: 1220, endX: 1590, speed: 1.2 },
         { id: "stable", startX: 1690, endX: 2030, speed: 1.0 }
       ]
+    },
+    // Lap 4-6 — same layout, but now Buschman and Stable Hand throw their
+    // signature objects (a can, a hammer) at the player periodically. A
+    // pulsing glow telegraphs the throw ~600ms before it launches.
+    {
+      platforms: [
+        { x: 0, y: GROUND_Y, w: 280, h: 40 },
+        { x: 350, y: GROUND_Y, w: 170, h: 40 },
+        { x: 580, y: GROUND_Y, w: 240, h: 40 },
+        { x: 895, y: GROUND_Y, w: 85, h: 40 },
+        { x: 1045, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#e35b7a" },
+        { x: 1130, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#f2c94c" },
+        { x: 1200, y: GROUND_Y, w: 400, h: 40 },
+        { x: 1670, y: GROUND_Y, w: 380, h: 40 },
+        { x: 2120, y: GROUND_Y, w: 230, h: 40 },
+        { x: 400, y: 120, w: 60, h: 15 },
+        { x: 680, y: 160, w: 28, h: 30 },
+        { x: 1250, y: 130, w: 60, h: 15 },
+        { x: 1330, y: 110, w: 60, h: 15 }
+      ],
+      collectiblesTemplate: [
+        { x: 120, y: 170 },
+        { x: 430, y: 100 },
+        { x: 1360, y: 90 },
+        { x: 1750, y: 155 },
+        { x: 1900, y: 155 }
+      ],
+      goal: { x: 2300, y: GROUND_Y },
+      levelWidth: 2350,
+      pool: { x0: 980, x1: 1200 },
+      chaserZones: [
+        { id: "buschman", startX: 1220, endX: 1590, speed: 1.2, throws: true },
+        { id: "stable", startX: 1690, endX: 2030, speed: 1.0, throws: true }
+      ]
+    },
+    // Lap 7 and beyond — everything from the throwing tier, plus Spore
+    // Loser and The Glitch waiting in an extended final stretch before the
+    // goal. Ground G widens from 230px to 500px and the goal pushes out to
+    // make room. Hardest tier, repeats for every lap after this one.
+    {
+      platforms: [
+        { x: 0, y: GROUND_Y, w: 280, h: 40 },
+        { x: 350, y: GROUND_Y, w: 170, h: 40 },
+        { x: 580, y: GROUND_Y, w: 240, h: 40 },
+        { x: 895, y: GROUND_Y, w: 85, h: 40 },
+        { x: 1045, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#e35b7a" },
+        { x: 1130, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#f2c94c" },
+        { x: 1200, y: GROUND_Y, w: 400, h: 40 },
+        { x: 1670, y: GROUND_Y, w: 380, h: 40 },
+        { x: 2120, y: GROUND_Y, w: 500, h: 40 },
+        { x: 400, y: 120, w: 60, h: 15 },
+        { x: 680, y: 160, w: 28, h: 30 },
+        { x: 1250, y: 130, w: 60, h: 15 },
+        { x: 1330, y: 110, w: 60, h: 15 }
+      ],
+      collectiblesTemplate: [
+        { x: 120, y: 170 },
+        { x: 430, y: 100 },
+        { x: 1360, y: 90 },
+        { x: 1750, y: 155 },
+        { x: 1900, y: 155 }
+      ],
+      goal: { x: 2570, y: GROUND_Y },
+      levelWidth: 2620,
+      pool: { x0: 980, x1: 1200 },
+      chaserZones: [
+        { id: "buschman", startX: 1220, endX: 1590, speed: 1.2, throws: true },
+        { id: "stable", startX: 1690, endX: 2030, speed: 1.0, throws: true },
+        { id: "glitch", startX: 2150, endX: 2280, speed: 1.1 },
+        { id: "shroom", startX: 2320, endX: 2450, speed: 1.3 }
+      ]
     }
   ];
 
@@ -894,6 +968,7 @@ document.addEventListener(
   let pool = null;
   let currentLevelIndex = 0;
   let activeChasers = [];
+  let activeProjectiles = [];
 
   function loadLevel(index) {
     const level = LEVELS[Math.min(index, LEVELS.length - 1)];
@@ -912,9 +987,13 @@ document.addEventListener(
         x: zone.endX,
         y: GROUND_Y - 24,
         facing: 1,
-        stunnedUntil: 0
+        stunnedUntil: 0,
+        throws: !!zone.throws,
+        windingUpUntil: 0,
+        nextThrowAt: 0
       };
     });
+    activeProjectiles = [];
   }
 
   let collectibles = [];
@@ -1160,11 +1239,28 @@ document.addEventListener(
 
     activeChasers.forEach(function (ch) {
       if (player.x < ch.startX - 220) return; // stays put at its spawn point until the player is actually close
-      const stunned = performance.now() < ch.stunnedUntil;
-      if (!stunned) {
+      const now = performance.now();
+      const stunned = now < ch.stunnedUntil;
+      const winding = ch.windingUpUntil > 0;
+
+      if (!stunned && !winding) {
         const dir = player.x > ch.x ? 1 : -1;
         ch.x = Math.max(ch.startX, Math.min(ch.endX, ch.x + dir * ch.speed * dt));
         ch.facing = dir;
+      }
+
+      if (ch.throws && !stunned && player.x >= ch.startX - 100) {
+        if (winding) {
+          if (now >= ch.windingUpUntil) {
+            const throwDir = player.x > ch.x ? 1 : -1;
+            ch.facing = throwDir;
+            activeProjectiles.push({ x: ch.x, y: PROJECTILE_Y, vx: throwDir * PROJECTILE_SPEED, kind: ch.id });
+            ch.windingUpUntil = 0;
+            ch.nextThrowAt = now + THROW_COOLDOWN_MS;
+          }
+        } else if (now >= ch.nextThrowAt) {
+          ch.windingUpUntil = now + THROW_WINDUP_MS;
+        }
       }
 
       const dxAbs = Math.abs(player.x + PLAYER_W / 2 - ch.x);
@@ -1187,6 +1283,19 @@ document.addEventListener(
       if (dxAbs < 13) {
         endRun("caught");
       }
+    });
+
+    activeProjectiles.forEach(function (p) {
+      p.x += p.vx * dt;
+      if (!player.onGround) return; // jumping over a thrown object is always safe, same as with the chaser itself
+      const pdx = Math.abs(player.x + PLAYER_W / 2 - p.x);
+      const pdy = Math.abs(player.y + PLAYER_H / 2 - p.y);
+      if (pdx < 12 && pdy < 14) {
+        endRun("caught");
+      }
+    });
+    activeProjectiles = activeProjectiles.filter(function (p) {
+      return p.x > -60 && p.x < LEVEL_WIDTH + 60;
     });
 
     camera.x = Math.max(0, Math.min(player.x - VIEW_W / 2, LEVEL_WIDTH - VIEW_W));
@@ -1329,11 +1438,21 @@ document.addEventListener(
 
   function drawChaserObstacle(ch) {
     const stunned = performance.now() < ch.stunnedUntil;
+    const winding = ch.windingUpUntil > 0;
     ctx.save();
     ctx.translate(ch.x, ch.y);
     if (ch.facing < 0) ctx.scale(-1, 1);
     ctx.scale(1.45, 1.45);
-    const legPhase = stunned ? 0 : performance.now() / 120;
+
+    if (winding) {
+      const pulse = 0.55 + Math.sin(performance.now() / 60) * 0.35;
+      ctx.fillStyle = "rgba(242,166,61," + pulse.toFixed(2) + ")";
+      ctx.beginPath();
+      ctx.arc(0, -6, 13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const legPhase = (stunned || winding) ? 0 : performance.now() / 120;
     const skin = "#e3b876";
 
     if (ch.id === "buschman") {
@@ -1368,6 +1487,36 @@ document.addEventListener(
       ctx.fillRect(6, -1, 7, 3.5);
       ctx.fillStyle = "#3a3a3a";
       ctx.fillRect(6, -1, 2, 3.5);
+    } else if (ch.id === "shroom") {
+      drawHumanoidBase("#7a3ab5", skin, legPhase);
+      drawChaserEyes(-10);
+      // Big mushroom cap
+      ctx.fillStyle = "#c9382a";
+      ctx.beginPath();
+      ctx.ellipse(0, -13.5, 14, 9.5, 0, Math.PI, 0, false);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#1b2740";
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      ctx.fillStyle = "#fbf5e8";
+      ctx.beginPath(); ctx.arc(-7, -15.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(1, -18.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(7, -14.5, 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#e3b876";
+      ctx.fillRect(-3.5, -13, 7, 3);
+    } else if (ch.id === "glitch") {
+      drawHumanoidBase("#3fafc0", skin, legPhase);
+      drawChaserHair("#5a4230", 5);
+      drawChaserEyes(-10);
+      ctx.strokeStyle = "#1b2740";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-5.2, -11, 3.2, 3);
+      ctx.strokeRect(2, -11, 3.2, 3);
+      ctx.beginPath();
+      ctx.moveTo(-2, -9.5);
+      ctx.lineTo(2, -9.5);
+      ctx.stroke();
     }
 
     if (stunned) {
@@ -1393,6 +1542,25 @@ document.addEventListener(
       }
     }
 
+    ctx.restore();
+  }
+
+  function drawProjectile(p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    const spin = performance.now() / 90;
+    ctx.rotate(spin);
+    if (p.kind === "buschman") {
+      ctx.fillStyle = "#c9c9c9";
+      ctx.fillRect(-3, -5, 6, 10);
+      ctx.fillStyle = "#4a7fb5";
+      ctx.fillRect(-3, -1, 6, 3);
+    } else {
+      ctx.fillStyle = "#5a5a5a";
+      ctx.fillRect(-6, -2.5, 7, 5);
+      ctx.fillStyle = "#8b5a3c";
+      ctx.fillRect(0, -1.2, 7, 2.4);
+    }
     ctx.restore();
   }
 
@@ -1436,6 +1604,7 @@ document.addEventListener(
     });
 
     activeChasers.forEach(drawChaserObstacle);
+    activeProjectiles.forEach(drawProjectile);
 
     drawGoal();
     drawPlayer();

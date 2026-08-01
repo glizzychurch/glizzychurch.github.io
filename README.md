@@ -228,19 +228,61 @@ next. Both this and Perfect Pour's identical round-flash bug are fixed
 to fade out on their own before the next state appears.
 
 **Each lap of a streak now uses a different, progressively harder
-layout** instead of repeating the same level. Three hand-built variants
-in a `LEVELS` array in the Gauntlet section of `script.js`. The original
-pool-less level was dropped from the rotation entirely — the pool
-crossing is now baked into every lap from the start, per feedback that
-it made a better default experience than the plain original:
+layout** instead of repeating the same level or plateauing forever after
+a fixed number of laps. Five hand-built variants in a `LEVELS` array in
+the Gauntlet section of `script.js`, selected via `levelIndexForStreak`
+rather than a straight 1-to-1 mapping (laps 4-6 all stay on the same
+throwing tier, and lap 7+ all use the finale tier — see below). The
+original pool-less level was dropped from the rotation entirely — the
+pool crossing is now baked into every lap from the start, per earlier
+feedback that it made a better default experience than the plain
+original:
 
 - **Lap 1** — the pool crossing (the gap at x=980 replaced with three
   inflatables), no chasers yet.
 - **Lap 2** — same layout, Buschman now patrols most of ground E and
   will end your run on contact.
-- **Lap 3 and beyond** — Buschman plus Stable Hand, each patrolling a
-  wide stretch of their own platform. This tier repeats for every lap
-  after.
+- **Lap 3** — Buschman plus Stable Hand, each patrolling a wide stretch
+  of their own platform.
+- **Lap 4-6** — same as lap 3, but Buschman and Stable Hand now throw
+  their signature objects at the player periodically (see below).
+- **Lap 7 and beyond** — everything from the throwing tier, plus Spore
+  Loser and The Glitch waiting in an extended final stretch right before
+  the goal. This is the hardest tier and repeats for every lap after.
+
+**Buschman and Stable Hand throw objects now** — a can and a hammer
+respectively — periodically while active, on top of their existing
+walk-and-catch threat. A chaser eligible to throw (`throws: true` on its
+zone) freezes in place with a pulsing glow for `THROW_WINDUP_MS` (600ms)
+as a telegraph, then launches a projectile horizontally toward whichever
+side the player is currently on, at a fixed height roughly matching a
+standing player's torso (`PROJECTILE_Y`). Throwing only becomes eligible
+once the player is within 100px of the zone (tighter than the 220px
+general activity gate), so there's no surprise first throw the instant
+the chaser becomes active. **Jumping over a thrown object is safe using
+the exact same rule as jumping over the chaser himself** — the
+projectile collision check is skipped entirely while airborne, so the
+"when in doubt, jump" mental model stays consistent whether the threat
+is a body or something thrown at you. Verified this holds for a player
+actually moving through the level, not just standing still: a simple
+bot that reacts to projectiles within 60px and also handles the
+chaser's own body cleared Buschman's throwing zone 8 times out of 8 in
+one test run.
+
+**Spore Loser and The Glitch join at lap 7**, appearing only in an
+extended final stretch just before the goal rather than throughout the
+whole level — ground G widens from 230px to 500px and the goal pushes
+from x=2300 to x=2570 to make room. Their zones (`glitch` at
+x:2150-2280, `shroom` at x:2320-2450) use the same walk-and-catch
+mechanic as Buschman and Stable Hand — no throwing for these two — with
+Spore Loser tuned slightly faster (`speed: 1.3`) to match his more
+aggressive Maze persona. Their art is a direct port of the same
+Maze source as Buschman and Stable Hand's — the mushroom cap and
+The Glitch's glasses render identically to their Maze appearances.
+Verified their finale section works in isolation (8/8 clean runs with a
+simple bunny-hop bot) separately from the earlier throwing zones, since
+a bot capable of chaining every obstacle in the level together reliably
+is a much higher bar than the fairness of any one section on its own.
 
 The inflatables themselves were widened from 30px to 45px after
 feedback that they were hard to land on — the gaps between them just
