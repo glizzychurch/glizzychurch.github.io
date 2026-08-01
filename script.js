@@ -780,35 +780,142 @@ document.addEventListener(
   const MAX_FALL_SPEED = 12;
   const PLAYER_W = 20, PLAYER_H = 28;
   const GROUND_Y = 190;
-  const TIME_LIMIT_SEC = 90; // absolute per-attempt safety net, separate from the streak's own time limit
+  const TIME_LIMIT_SEC = 90; // absolute per-attempt safety net against stalling forever
   const BOARD_SIZE = 5;
-  const STREAK_TIME_START = 30; // seconds — generous, comfortable even with detours for every glizzy
-  const STREAK_TIME_STEP = 3; // gets this much tighter each successful lap
-  const STREAK_TIME_FLOOR = 18; // never gets tighter than this
+  const BASE_TIME_SCORE = 300; // theoretical score at 0s -- faster completion means a higher base
+  const TIME_SCORE_RATE = 8; // points lost per second
+  const MIN_TIME_SCORE = 60; // floor -- a slow-but-successful lap still earns something real
+  const COLLECTIBLE_BONUS = 15; // per glizzy collected, no requirement to get them all
+  const STOMP_STUN_MS = 2000; // how long a stomped chaser stays frozen
+  const STOMP_BOUNCE = -6.3; // small upward bounce on a successful stomp
   const LAP_FLASH_MS = 1300;
 
-  const platforms = [
-    { x: 0, y: GROUND_Y, w: 280, h: 40 },
-    { x: 350, y: GROUND_Y, w: 170, h: 40 },
-    { x: 580, y: GROUND_Y, w: 240, h: 40 },
-    { x: 895, y: GROUND_Y, w: 85, h: 40 },
-    { x: 1050, y: GROUND_Y, w: 400, h: 40 },
-    { x: 1520, y: GROUND_Y, w: 380, h: 40 },
-    { x: 1970, y: GROUND_Y, w: 230, h: 40 },
-    { x: 400, y: 120, w: 60, h: 15 },
-    { x: 680, y: 160, w: 28, h: 30 },
-    { x: 1100, y: 130, w: 60, h: 15 },
-    { x: 1180, y: 110, w: 60, h: 15 }
+  const LEVELS = [
+    // Lap 1 — the pool crossing, no chasers yet. Inflatables widened per
+    // feedback (was 30px, now 45px -- noticeably easier to land on).
+    {
+      platforms: [
+        { x: 0, y: GROUND_Y, w: 280, h: 40 },
+        { x: 350, y: GROUND_Y, w: 170, h: 40 },
+        { x: 580, y: GROUND_Y, w: 240, h: 40 },
+        { x: 895, y: GROUND_Y, w: 85, h: 40 },
+        { x: 1045, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#e35b7a" },
+        { x: 1130, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#f2c94c" },
+        { x: 1200, y: GROUND_Y, w: 400, h: 40 },
+        { x: 1670, y: GROUND_Y, w: 380, h: 40 },
+        { x: 2120, y: GROUND_Y, w: 230, h: 40 },
+        { x: 400, y: 120, w: 60, h: 15 },
+        { x: 680, y: 160, w: 28, h: 30 },
+        { x: 1250, y: 130, w: 60, h: 15 },
+        { x: 1330, y: 110, w: 60, h: 15 }
+      ],
+      collectiblesTemplate: [
+        { x: 120, y: 170 },
+        { x: 430, y: 100 },
+        { x: 1360, y: 90 },
+        { x: 1750, y: 155 },
+        { x: 1900, y: 155 }
+      ],
+      goal: { x: 2300, y: GROUND_Y },
+      levelWidth: 2350,
+      pool: { x0: 980, x1: 1200 },
+      chaserZones: []
+    },
+    // Lap 2 — same pool crossing, Buschman patrols the stretch on ground E.
+    {
+      platforms: [
+        { x: 0, y: GROUND_Y, w: 280, h: 40 },
+        { x: 350, y: GROUND_Y, w: 170, h: 40 },
+        { x: 580, y: GROUND_Y, w: 240, h: 40 },
+        { x: 895, y: GROUND_Y, w: 85, h: 40 },
+        { x: 1045, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#e35b7a" },
+        { x: 1130, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#f2c94c" },
+        { x: 1200, y: GROUND_Y, w: 400, h: 40 },
+        { x: 1670, y: GROUND_Y, w: 380, h: 40 },
+        { x: 2120, y: GROUND_Y, w: 230, h: 40 },
+        { x: 400, y: 120, w: 60, h: 15 },
+        { x: 680, y: 160, w: 28, h: 30 },
+        { x: 1250, y: 130, w: 60, h: 15 },
+        { x: 1330, y: 110, w: 60, h: 15 }
+      ],
+      collectiblesTemplate: [
+        { x: 120, y: 170 },
+        { x: 430, y: 100 },
+        { x: 1360, y: 90 },
+        { x: 1750, y: 155 },
+        { x: 1900, y: 155 }
+      ],
+      goal: { x: 2300, y: GROUND_Y },
+      levelWidth: 2350,
+      pool: { x0: 980, x1: 1200 },
+      chaserZones: [
+        { id: "buschman", startX: 1220, endX: 1590, speed: 1.2 }
+      ]
+    },
+    // Lap 3 and beyond — the pool crossing plus two chasers. Hardest tier,
+    // repeats for every lap after this one.
+    {
+      platforms: [
+        { x: 0, y: GROUND_Y, w: 280, h: 40 },
+        { x: 350, y: GROUND_Y, w: 170, h: 40 },
+        { x: 580, y: GROUND_Y, w: 240, h: 40 },
+        { x: 895, y: GROUND_Y, w: 85, h: 40 },
+        { x: 1045, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#e35b7a" },
+        { x: 1130, y: GROUND_Y, w: 45, h: 12, type: "inflatable", color: "#f2c94c" },
+        { x: 1200, y: GROUND_Y, w: 400, h: 40 },
+        { x: 1670, y: GROUND_Y, w: 380, h: 40 },
+        { x: 2120, y: GROUND_Y, w: 230, h: 40 },
+        { x: 400, y: 120, w: 60, h: 15 },
+        { x: 680, y: 160, w: 28, h: 30 },
+        { x: 1250, y: 130, w: 60, h: 15 },
+        { x: 1330, y: 110, w: 60, h: 15 }
+      ],
+      collectiblesTemplate: [
+        { x: 120, y: 170 },
+        { x: 430, y: 100 },
+        { x: 1360, y: 90 },
+        { x: 1750, y: 155 },
+        { x: 1900, y: 155 }
+      ],
+      goal: { x: 2300, y: GROUND_Y },
+      levelWidth: 2350,
+      pool: { x0: 980, x1: 1200 },
+      chaserZones: [
+        { id: "buschman", startX: 1220, endX: 1590, speed: 1.2 },
+        { id: "stable", startX: 1690, endX: 2030, speed: 1.0 }
+      ]
+    }
   ];
-  const collectiblesTemplate = [
-    { x: 120, y: 170 },
-    { x: 430, y: 100 },
-    { x: 1210, y: 90 },
-    { x: 1600, y: 155 },
-    { x: 1750, y: 155 }
-  ];
-  const goal = { x: 2150, y: GROUND_Y };
-  const LEVEL_WIDTH = 2200;
+
+  let platforms = [];
+  let collectiblesTemplate = [];
+  let goal = { x: 0, y: 0 };
+  let LEVEL_WIDTH = 0;
+  let pool = null;
+  let currentLevelIndex = 0;
+  let activeChasers = [];
+
+  function loadLevel(index) {
+    const level = LEVELS[Math.min(index, LEVELS.length - 1)];
+    currentLevelIndex = index;
+    platforms = level.platforms;
+    collectiblesTemplate = level.collectiblesTemplate;
+    goal = level.goal;
+    LEVEL_WIDTH = level.levelWidth;
+    pool = level.pool;
+    activeChasers = level.chaserZones.map(function (zone) {
+      return {
+        id: zone.id,
+        startX: zone.startX,
+        endX: zone.endX,
+        speed: zone.speed,
+        x: zone.endX,
+        y: GROUND_Y - 24,
+        facing: 1,
+        stunnedUntil: 0
+      };
+    });
+  }
 
   let collectibles = [];
   let player = {};
@@ -816,16 +923,18 @@ document.addEventListener(
   let leftPressed = false;
   let rightPressed = false;
   let jumpRequested = false;
+  let jumpBufferedAt = 0;
+  let coyoteUntil = 0;
+  const JUMP_BUFFER_MS = 120; // a jump pressed slightly before landing still fires on landing
+  const COYOTE_MS = 90; // a jump pressed slightly after walking off an edge still fires
   let collectedCount = 0;
   let startTime = 0;
   let runFrame = 0;
   let streakCount = 0;
   let sessionScore = 0;
-  let currentTimeLimit = STREAK_TIME_START;
   let lapContinueTimer = null;
   let lapFlashHideTimer = null;
   let lapTransitioning = false;
-  const TOTAL_COLLECTIBLES = collectiblesTemplate.length;
   let rafId = null;
   let gameState = "idle"; // idle | playing | result
   let fallbackBest = 0;
@@ -967,7 +1076,9 @@ document.addEventListener(
     return Math.min(1, Math.max(0, player.x / LEVEL_WIDTH));
   }
   function liveScore() {
-    return Math.round(currentProgressPct() * 100) + collectedCount * 15;
+    const elapsedSec = (performance.now() - startTime) / 1000;
+    const timeScore = Math.max(MIN_TIME_SCORE, Math.round(BASE_TIME_SCORE - elapsedSec * TIME_SCORE_RATE));
+    return sessionScore + timeScore + collectedCount * COLLECTIBLE_BONUS;
   }
 
   function resetRun() {
@@ -980,6 +1091,8 @@ document.addEventListener(
     leftPressed = false;
     rightPressed = false;
     jumpRequested = false;
+    coyoteUntil = 0;
+    jumpBufferedAt = 0;
     runFrame = 0;
     startTime = performance.now();
   }
@@ -1001,6 +1114,7 @@ document.addEventListener(
       }
     });
 
+    const wasOnGround = player.onGround;
     player.vy += GRAVITY;
     if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED;
     player.y += player.vy;
@@ -1019,11 +1133,19 @@ document.addEventListener(
       }
     });
 
-    if (jumpRequested && player.onGround) {
+    if (wasOnGround && !player.onGround) {
+      coyoteUntil = performance.now() + COYOTE_MS; // walked off an edge -- a jump right after this still works
+    }
+
+    const jumpStillBuffered = jumpRequested && performance.now() - jumpBufferedAt < JUMP_BUFFER_MS;
+    const canJump = player.onGround || performance.now() < coyoteUntil;
+    if (jumpStillBuffered && canJump) {
       player.vy = JUMP_VELOCITY;
       player.onGround = false;
+      jumpRequested = false;
+    } else if (!jumpStillBuffered) {
+      jumpRequested = false; // buffer window expired without landing — give up on it
     }
-    jumpRequested = false;
 
     collectibles.forEach(function (c) {
       if (c.collected) return;
@@ -1032,6 +1154,37 @@ document.addEventListener(
       if (Math.sqrt(dx * dx + dy * dy) < 22) {
         c.collected = true;
         collectedCount += 1;
+      }
+    });
+
+    activeChasers.forEach(function (ch) {
+      if (player.x < ch.startX - 220) return; // stays put at its spawn point until the player is actually close
+      const stunned = performance.now() < ch.stunnedUntil;
+      if (!stunned) {
+        const dir = player.x > ch.x ? 1 : -1;
+        ch.x = Math.max(ch.startX, Math.min(ch.endX, ch.x + dir * ch.speed));
+        ch.facing = dir;
+      }
+
+      const dxAbs = Math.abs(player.x + PLAYER_W / 2 - ch.x);
+      // Stomp: falling, close enough horizontally, and landing specifically on
+      // his head/shoulders rather than walking into him at ground level.
+      if (!stunned && player.vy > 0 && dxAbs < 14) {
+        const feetY = player.y + PLAYER_H;
+        const headBandTop = ch.y - 24;
+        const headBandBottom = ch.y - 4;
+        if (feetY >= headBandTop && feetY <= headBandBottom) {
+          ch.stunnedUntil = performance.now() + STOMP_STUN_MS;
+          player.vy = STOMP_BOUNCE;
+          return;
+        }
+      }
+
+      if (!player.onGround) return; // airborne is always safe otherwise — jumping over is the intended way past
+      if (player.y < GROUND_Y - PLAYER_H - 15) return; // standing on an elevated platform above the chaser is also safe
+      if (stunned) return; // a stunned chaser can't catch anyone
+      if (dxAbs < 13) {
+        endRun("caught");
       }
     });
 
@@ -1148,6 +1301,100 @@ document.addEventListener(
     ctx.restore();
   }
 
+  function drawHumanoidBase(bodyColor, skinColor, legPhase) {
+    ctx.fillStyle = "#1b2740";
+    const legSwing = Math.sin(legPhase) * 2;
+    ctx.fillRect(-5 + legSwing, 6, 4, 7);
+    ctx.fillRect(1 - legSwing, 6, 4, 7);
+    ctx.fillStyle = bodyColor;
+    ctx.fillRect(-7, -4, 14, 11);
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-9, -2, 3, 7);
+    ctx.fillRect(6, -2, 3, 7);
+    ctx.fillStyle = skinColor;
+    ctx.fillRect(-6, -14, 12, 10);
+  }
+
+  function drawChaserHair(color, height) {
+    ctx.fillStyle = color;
+    ctx.fillRect(-6.5, -15, 13, height || 4);
+  }
+
+  function drawChaserEyes(offsetY) {
+    ctx.fillStyle = "#1b2740";
+    ctx.fillRect(-4, offsetY, 1.6, 2.6);
+    ctx.fillRect(2, offsetY, 1.6, 2.6);
+  }
+
+  function drawChaserObstacle(ch) {
+    const stunned = performance.now() < ch.stunnedUntil;
+    ctx.save();
+    ctx.translate(ch.x, ch.y);
+    if (ch.facing < 0) ctx.scale(-1, 1);
+    ctx.scale(1.45, 1.45);
+    const legPhase = stunned ? 0 : performance.now() / 120;
+    const skin = "#e3b876";
+
+    if (ch.id === "buschman") {
+      drawHumanoidBase("#4a7fb5", skin, legPhase);
+      drawChaserHair("#6b4429", 3);
+      drawChaserEyes(-10);
+      ctx.fillStyle = "#1b2740";
+      ctx.beginPath();
+      ctx.arc(0, -15, 6.3, Math.PI, 0, false);
+      ctx.fill();
+      ctx.fillRect(3, -16, 6, 2.5); // brim
+      ctx.fillStyle = "#c9a227";
+      ctx.beginPath(); ctx.arc(0, -18, 1.1, 0, Math.PI * 2); ctx.fill();
+      // Beer can in hand
+      ctx.fillStyle = "#c9c9c9";
+      ctx.fillRect(7, 3, 4, 7);
+      ctx.fillStyle = "#4a7fb5";
+      ctx.fillRect(7, 4, 4, 2);
+    } else if (ch.id === "stable") {
+      drawHumanoidBase("#8b5a3c", skin, legPhase);
+      drawChaserHair("#241f18", 4);
+      drawChaserEyes(-10);
+      // Hard hat
+      ctx.fillStyle = "#e3b876";
+      ctx.beginPath();
+      ctx.arc(0, -14, 6.5, Math.PI, 0, false);
+      ctx.fill();
+      // Hammer in hand
+      ctx.fillStyle = "#8b5a3c";
+      ctx.fillRect(8.5, 1, 2, 8);
+      ctx.fillStyle = "#5a5a5a";
+      ctx.fillRect(6, -1, 7, 3.5);
+      ctx.fillStyle = "#3a3a3a";
+      ctx.fillRect(6, -1, 2, 3.5);
+    }
+
+    if (stunned) {
+      const spin = performance.now() / 200;
+      ctx.fillStyle = "#f2c94c";
+      for (let i = 0; i < 3; i++) {
+        const a = spin + (i * Math.PI * 2) / 3;
+        const sx = Math.cos(a) * 7;
+        const sy = -19 + Math.sin(a) * 2.5;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(a);
+        ctx.beginPath();
+        for (let p = 0; p < 5; p++) {
+          const ang = (p * Math.PI * 2) / 5 - Math.PI / 2;
+          const r = p % 2 === 0 ? 2.4 : 1;
+          const px = Math.cos(ang) * r, py = Math.sin(ang) * r;
+          if (p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    ctx.restore();
+  }
+
   function render() {
     const grad = ctx.createLinearGradient(0, 0, 0, VIEW_H);
     grad.addColorStop(0, "#1b2740");
@@ -1159,7 +1406,24 @@ document.addEventListener(
     ctx.save();
     ctx.translate(-camera.x, 0);
 
+    if (pool) {
+      ctx.fillStyle = "#2f9fd6";
+      ctx.fillRect(pool.x0, GROUND_Y, pool.x1 - pool.x0, 60);
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.fillRect(pool.x0, GROUND_Y, pool.x1 - pool.x0, 3);
+    }
+
     platforms.forEach(function (p) {
+      if (p.type === "inflatable") {
+        ctx.fillStyle = p.color || "#e35b7a";
+        ctx.beginPath();
+        ctx.ellipse(p.x + p.w / 2, p.y + p.h / 2, p.w / 2, p.h / 2 + 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#fbf5e8";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        return;
+      }
       ctx.fillStyle = "#6b4429";
       ctx.fillRect(p.x, p.y, p.w, p.h);
       ctx.fillStyle = "#5a9c4a";
@@ -1169,6 +1433,8 @@ document.addEventListener(
     collectibles.forEach(function (c) {
       if (!c.collected) drawGlizzy(c);
     });
+
+    activeChasers.forEach(drawChaserObstacle);
 
     drawGoal();
     drawPlayer();
@@ -1192,8 +1458,8 @@ document.addEventListener(
     lapFlashEl.classList.remove("show");
     streakCount = 0;
     sessionScore = 0;
-    currentTimeLimit = STREAK_TIME_START;
     streakEl.textContent = "0";
+    loadLevel(0);
     resetRun();
     overlay.hidden = true;
     submitBox.hidden = true;
@@ -1239,34 +1505,25 @@ document.addEventListener(
 
   function handleGoalReached() {
     const elapsedSec = (performance.now() - startTime) / 1000;
-    const timeBonus = Math.max(0, Math.round(100 - elapsedSec * 2));
-    const roundScore = liveScore() + 150 + timeBonus;
+    const timeScore = Math.max(MIN_TIME_SCORE, Math.round(BASE_TIME_SCORE - elapsedSec * TIME_SCORE_RATE));
+    const roundScore = timeScore + collectedCount * COLLECTIBLE_BONUS;
     sessionScore += roundScore;
 
-    const gotAll = collectedCount === TOTAL_COLLECTIBLES;
-    const fastEnough = elapsedSec <= currentTimeLimit;
-
-    if (gotAll && fastEnough) {
-      streakCount += 1;
-      streakEl.textContent = String(streakCount);
-      currentTimeLimit = Math.max(STREAK_TIME_FLOOR, currentTimeLimit - STREAK_TIME_STEP);
-      scoreEl.textContent = String(sessionScore);
-      showLapFlash("+" + roundScore + "! Lap " + streakCount + " · beat " + currentTimeLimit.toFixed(0) + "s");
-      cancelAnimationFrame(rafId);
-      lapTransitioning = true;
-      pauseBtn.disabled = true; // brief window between laps — nothing useful to pause
-      lapContinueTimer = setTimeout(function () {
-        lapTransitioning = false;
-        pauseBtn.disabled = false;
-        if (gameState !== "playing") return; // guard in case the game somehow ended during the flash window
-        resetRun();
-        loop();
-      }, LAP_FLASH_MS);
-      return;
-    }
-
-    const why = !gotAll ? "Missed a glizzy." : "Too slow to keep the streak going.";
-    finishSession("Made it to The Shed in " + elapsedSec.toFixed(1) + "s! " + why);
+    streakCount += 1;
+    streakEl.textContent = String(streakCount);
+    scoreEl.textContent = String(sessionScore);
+    showLapFlash("+" + roundScore + "! Lap " + streakCount);
+    cancelAnimationFrame(rafId);
+    lapTransitioning = true;
+    pauseBtn.disabled = true; // brief window between laps — nothing useful to pause
+    lapContinueTimer = setTimeout(function () {
+      lapTransitioning = false;
+      pauseBtn.disabled = false;
+      if (gameState !== "playing") return; // guard in case the game somehow ended during the flash window
+      loadLevel(streakCount);
+      resetRun();
+      loop();
+    }, LAP_FLASH_MS);
   }
 
   function finishSession(message) {
@@ -1296,12 +1553,16 @@ document.addEventListener(
 
   function endRun(reason) {
     if (gameState !== "playing") return;
-    // Fell or ran out the clock entirely — this attempt earns nothing, the
-    // streak ends with whatever was already banked from prior clean laps.
-    const message =
-      reason === "timeout"
-        ? "Ran out the clock. (" + Math.round(currentProgressPct() * 100) + "% of the way there)"
-        : "Down you go. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    // This attempt earns nothing — the streak ends with whatever was
+    // already banked from prior clean laps.
+    let message;
+    if (reason === "timeout") {
+      message = "Ran out the clock. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    } else if (reason === "caught") {
+      message = "Caught. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    } else {
+      message = "Down you go. (" + Math.round(currentProgressPct() * 100) + "% of the way there)";
+    }
     finishSession(message);
   }
 
@@ -1337,6 +1598,7 @@ document.addEventListener(
     if (e.isTrusted === false) return;
     e.preventDefault();
     jumpRequested = true;
+    jumpBufferedAt = performance.now();
   });
 
   window.addEventListener("keydown", function (e) {
@@ -1345,6 +1607,7 @@ document.addEventListener(
     if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") rightPressed = true;
     if (e.key === "ArrowUp" || e.key === "w" || e.key === "W" || e.key === " ") {
       jumpRequested = true;
+      jumpBufferedAt = performance.now();
       e.preventDefault();
     }
   });

@@ -142,21 +142,23 @@ The Shed (an actual little shed now — red walls, white trim, black roof,
 not a flagpole), jump the gaps, clear the crate, grab every glizzy along
 the way.
 
-**Streak mode:** reach The Shed with all 5 glizzies collected *and*
-under the current time limit, and the level immediately resets for
-another lap — a little faster required each time (starts at 30s, tightens
-3s per lap, floors out at 18s so it never becomes literally impossible).
-Each lap's score banks into a running session total, which is what
-actually gets submitted to the leaderboard — that's what raises the
-ceiling, since a single lap alone tops out around 400-425 points. Reach
-the goal but miss a glizzy or run over time and the streak ends there
-(that lap still counts, it just doesn't continue). Falling or timing out
-entirely ends the streak with zero credit for that attempt — only
-whatever was already banked from clean laps.
+**Streak mode:** reach The Shed and the level immediately resets for
+another lap — you keep going as long as you don't fall or get caught.
+There's no collectible quota and no time limit to beat anymore; those
+used to gate whether the streak continued at all, which meant a
+near-perfect lap that missed one glizzy or ran a beat too slow scored
+nothing extra for the attempt. Now every successful lap counts toward
+the score, however it went. Each lap's score banks into a running
+session total, which is what gets submitted to the leaderboard.
 
-**Scoring, per lap:** distance reached (up to 100 pts) + 15 pts per
-glizzy collected (5 on the level) + 150 pts for reaching The Shed + up
-to 100 pts more the faster you finish.
+**Scoring, per lap:** a time-based score, higher for a faster
+completion (`BASE_TIME_SCORE` minus `TIME_SCORE_RATE` per second
+elapsed, floored at `MIN_TIME_SCORE` so a slow-but-successful lap still
+earns something real) plus `COLLECTIBLE_BONUS` (15) per glizzy
+collected — no requirement to grab all of them, partial credit for
+whatever you get. Falling, timing out (the 90-second absolute safety
+net), or getting caught ends the run with zero credit for that specific
+attempt — only whatever was already banked from prior clean laps.
 
 **A note on cheating:** jump and movement inputs only count if they're
 genuine browser-trusted events, same idea as the other games — a script
@@ -169,10 +171,7 @@ platform rectangles near the top of the Glizzy Gauntlet section in
 constants above that (`GRAVITY`, `JUMP_VELOCITY`, `MOVE_SPEED`) cap the
 maximum jump at about 99px horizontal / 100px vertical — keep new gaps
 and platform heights under that with some margin, or a jump literally
-becomes impossible to make. If you tweak the level's minimum clean-clear
-time, double check `STREAK_TIME_START` and `STREAK_TIME_FLOOR` (same
-section) still make sense against it — the floor in particular needs to
-stay achievable even while detouring for every glizzy.
+becomes impossible to make.
 
 **Two bugs fixed:** leaderboard submissions across all four games used
 to silently swallow write failures — if Firebase rejected a score (for
@@ -184,6 +183,162 @@ button on failure instead. Separately, the lap-transition flash text
 at full opacity indefinitely, showing through on top of whatever came
 next. Both this and Perfect Pour's identical round-flash bug are fixed
 to fade out on their own before the next state appears.
+
+**Each lap of a streak now uses a different, progressively harder
+layout** instead of repeating the same level. Three hand-built variants
+in a `LEVELS` array in the Gauntlet section of `script.js`. The original
+pool-less level was dropped from the rotation entirely — the pool
+crossing is now baked into every lap from the start, per feedback that
+it made a better default experience than the plain original:
+
+- **Lap 1** — the pool crossing (the gap at x=980 replaced with three
+  inflatables), no chasers yet.
+- **Lap 2** — same layout, Buschman now patrols most of ground E and
+  will end your run on contact.
+- **Lap 3 and beyond** — Buschman plus Stable Hand, each patrolling a
+  wide stretch of their own platform. This tier repeats for every lap
+  after.
+
+The inflatables themselves were widened from 30px to 45px after
+feedback that they were hard to land on — the gaps between them just
+shrink accordingly (was 65/55/40px, now 65/40/25px), so the crossing is
+strictly easier, not repositioned.
+
+`loadLevel(index)` swaps `platforms`, `collectiblesTemplate`, `goal`,
+`LEVEL_WIDTH`, and the chaser zones all at once; it's called on every
+lap transition using `streakCount` as the index (clamped to the last
+level once you're past lap 3), so the level actually changes underneath
+you mid-streak.
+
+**Chaser obstacles now use the actual Maze character art**, not a
+simplified stand-in. The first version drew a plain colored ellipse with
+stick legs and a small prop icon — close in spirit but visually just
+read as "a different-colored version of the player," which wasn't the
+goal. `drawHumanoidBase`, the hair-drawing helper, and the per-character
+detail blocks (Buschman's cap and beer can, Stable Hand's hard hat and
+hammer) are now a direct port of the exact same functions from the Maze
+section, just called from Gauntlet's own scope since the two games are
+separate IIFEs and can't share functions directly. Same body shape, same
+colors, same props as their Maze appearances.
+
+**Chasers patrol a wide stretch of their platform now, not a narrow
+band.** The very first version confined each chaser to a zone under
+~60px, specifically so a single jump could clear the entire zone in one
+continuous hop without ever landing mid-zone. That constraint doesn't
+apply anymore: since reaching the goal always continues the streak
+regardless of speed, there's no need to clear an entire zone in one
+jump — the player can simply walk normally and jump over the chaser
+specifically at the moment of passing him, wherever he happens to be.
+Buschman now patrols x:1220-1590 (370px, nearly all of ground E,
+including underneath both staircase platforms) and Stable Hand patrols
+x:1690-2030 (340px), both spanning most of their ground segment.
+Touching one while grounded still ends the run exactly like falling into
+a pit; **jumping over one is still always safe regardless of timing**,
+since the collision check is skipped entirely while airborne. Chasers
+still don't start moving until the player is within about 220px of
+`startX`, so they don't drift to a corner and sit there for the entire
+earlier part of the level before the player ever arrives.
+
+**Landing on a chaser's head stuns him instead of just passing over
+safely.** A stomp requires falling (`player.vy > 0`, so jumping up into
+him from below doesn't count) with the player's feet landing in a band
+roughly across his head and shoulders (`ch.y - 24` to `ch.y - 4`) rather
+than his whole body — walking into him at ground level is still a
+regular catch, not a stomp, even though both involve contact. A
+successful stomp freezes him in place (`stunnedUntil`, 2 seconds) and
+gives the player a small bounce (`STOMP_BOUNCE`, about 60% of a normal
+jump) rather than continuing to fall straight through him. While
+stunned he stops moving entirely and can't catch the player even at
+point-blank range, with three small spinning stars over his head as the
+tell. Verified the full lifecycle directly: stomping him and then
+standing right next to him at ground level for the whole 2-second
+window left him motionless and harmless the entire time; waiting past
+that window with the player still standing there resulted in a normal
+catch, confirming he goes back to being dangerous once it wears off.
+
+**Chaser zones can safely overlap elevated platforms now — this took
+two attempts to get right.** Buschman's zone originally overlapped the
+staircase platforms built for reaching a nearby collectible. A chaser
+only tracks x — it has no concept of "the player is safely elevated
+above me" beyond a grounded/airborne check — so standing on that
+staircase (left of his zone's own left edge at the time) pulled him
+toward the player and pinned him against his `startX` boundary, unable
+to follow any further; from the player's view, he just stopped and sat
+there. First fix: moved his zone to start past where the staircase ends,
+avoiding the overlap entirely. That worked, but it meant he couldn't
+approach a player standing anywhere near the pool exit or the staircase,
+which read as a *different* flavor of "stuck" even though it was
+technically working as designed — a chaser waiting at his own boundary
+because the player hadn't entered his territory. The actual fix: the
+chaser collision check requires the player be near actual ground level
+(`player.y >= GROUND_Y - PLAYER_H - 15`) before it can trigger at all,
+which was *already true* by the time the zone got relocated — meaning
+the elevation check alone was sufficient, and the zone never needed to
+avoid the staircase in the first place. His zone now extends back to
+x:1220 (right where ground E begins) through x:1590, walking freely
+underneath both staircase platforms — standing on either one stays
+correctly safe the whole time, confirmed by tracking his position live
+while parked on the platform for several seconds. If you're chasing a
+similar bug, check whether an elevation or other safety check already
+covers the case before reaching for a zone-relocation fix — the
+relocation can end up solving the wrong half of the problem.
+
+The pool itself is just a blue rectangle drawn behind the platforms
+(`pool: { x0, x1 }` on a level, drawn in `render()`) — falling into it
+ends the run the same as any other pit, nothing pool-specific about the
+fail state. Inflatable platforms are regular platform objects with
+`type: "inflatable"` and a `color`, rendered as a filled oval instead of
+the usual brown/green block.
+
+**Jump input is now buffered, and has coyote time** — two standard
+platformer techniques, added after feedback that jumps sometimes felt
+laggy and caused avoidable falls. Previously, a jump pressed even one
+frame before actually landing was silently dropped (the game only
+checked "is a jump requested AND are you on the ground *this exact
+frame*", then cleared the request regardless of the outcome) — pressing
+early, which happens constantly in real play, just didn't do anything.
+Now: `JUMP_BUFFER_MS` (120ms) keeps a jump request alive for a short
+window so it fires the instant you land if you pressed slightly early,
+and `COYOTE_MS` (90ms) does the same in reverse — a jump pressed just
+after walking off an edge still fires, as if you'd jumped a beat before
+leaving the ground. Both are standard, expected behavior in essentially
+every platformer; their absence was the bug, not a deliberate difficulty
+choice.
+
+**Fixed a false "Caught" bug:** the chaser collision check only tested
+whether the player was grounded and horizontally close — it didn't check
+*how high up*. The staircase platforms near Buschman's zone (built for
+reaching a collectible) sit directly above his patrol path, so landing
+on them to grab that collectible was getting flagged as a catch even
+though the player was clearly elevated and safe. Fixed by also requiring
+the player's y-position to be near actual ground level, not just
+"standing on solid ground" — an elevated platform above a chaser is now
+correctly always safe. Verified both directions: standing on the
+staircase above Buschman no longer ends the run, and standing at his
+actual ground level still does.
+
+**Mobile-specific sizing:** the game canvas for all four Arcade games
+was rendering noticeably smaller than it needed to on narrow phones —
+measured it directly and found `.game-panel`'s side padding alone was
+eating 56px of a 390px-wide screen. Tightened that padding specifically
+under 480px width (`--space-1` instead of `--space-3`), which grows the
+canvas by about 16% on a typical phone without touching desktop at all.
+The Gauntlet jump button also gets noticeably bigger (74px → 92px) under
+the same breakpoint.
+
+**Fixed garbled/overlapping text on the lap-transition flash, mobile
+specifically:** same root cause as an earlier bug in the start-screen
+overlay — `.pour-round-flash` (used by both Gauntlet's lap flash and
+Perfect Pour's round flash) is nested inside a `line-height: 0`
+container (a trick to remove the canvas's default inline-element gap),
+and never had its own line-height set to override that inheritance. On
+wider desktop screens the flash text fit on one line so the bug was
+invisible; on narrow mobile widths the text wraps to two lines, and with
+inherited `line-height: 0` those two lines collapse on top of each
+other into unreadable overlapping text. Fixed by giving the shared class
+its own explicit `line-height`, the same fix pattern as before, just
+on an element outside the overlay this time — worth keeping in mind if
+any other text ends up added inside these canvas-wrap containers later.
 
 ## About the Glizzy Maze game
 
@@ -358,7 +513,7 @@ of `Date.now()`.
          ".write": true,
          ".indexOn": "score",
          "$entry": {
-           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 10000"
+           ".validate": "newData.hasChildren(['name','score','ts']) && newData.child('name').isString() && newData.child('name').val().length <= 30 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100000"
          }
        },
        "mazeScores": {
